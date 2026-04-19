@@ -1,0 +1,72 @@
+import os
+import asyncio
+import time
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
+
+from tracea.server.db import init_db, close_db, get_db
+
+start_time = time.time()
+_retention_task: asyncio.Task | None = None
+
+
+async def retention_cleanup():
+    """Delete sessions older than TRACEA_RETENTION_DAYS every hour."""
+    retention_days = int(os.getenv("TRACEA_RETENTION_DAYS", "30"))
+    cutoff = f"datetime('now', '-{retention_days} days')"
+    while True:
+        await asyncio.sleep(3600)
+        try:
+            db = await anext(get_db())
+            old = await db.execute(f"SELECT session_id FROM sessions WHERE started_at < {cutoff}")
+            for (sid,) in [row async for row in old]:
+                await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (sid,))
+                await db.execute("DELETE FROM issues WHERE session_id = ?", (sid,))
+                await db.execute("DELETE FROM events WHERE session_id = ?", (sid,))
+                await db.execute("DELETE FROM sessions WHERE session_id = ?", (sid,))
+            await db.commit()
+        except Exception as e:
+            print(f"[tracea] Retention failed: {e}")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global _retention_task
+    await init_db()
+    _retention_task = asyncio.create_task(retention_cleanup())
+    yield
+    if _retention_task:
+        _retention_task.cancel()
+    await close_db()
+
+
+app = FastAPI(title="tracea", version="0.1.0", lifespan=lifespan)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "db": "ok", "uptime_s": int(time.time() - start_time)}
+
+
+@app.get("/")
+async def root():
+    return RedirectResponse(url="/static/index.html")
+
+
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+from tracea.server.routes.ingest import router as ingest_router
+from tracea.server.routes.sessions import router as sessions_router
+from tracea.server.routes.issues import router as issues_router
+
+app.include_router(ingest_router)
+app.include_router(sessions_router)
+app.include_router(issues_router)
+
+
+def create_app() -> FastAPI:
+    return app
