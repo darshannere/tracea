@@ -1,0 +1,11 @@
+services:
+  tracea:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - TRACEA_DB_PATH=/data/tracea.db
+      - TRACEA_RETENTION_DAYS=30
+    restart: unless-stopped
