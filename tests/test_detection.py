@@ -45,9 +45,9 @@ def test_repetition_block():
         {'tool_name': 'web_search'},
         {'tool_name': 'web_search'},
         {'tool_name': 'web_search'},
-        {'tool_name': 'web_search'},
     ]
     assert check_repetition({'tool_name': 'web_search'}, events, 'tool_name', 5) == True
+    # min_count=6 requires 6 consecutive: 4 in events + current = 5 total, not enough
     assert check_repetition({'tool_name': 'web_search'}, events, 'tool_name', 6) == False
 
 

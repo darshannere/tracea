@@ -70,6 +70,10 @@ def check_repetition(event: dict, recent_events: list[dict], rep_field: str, min
     if current_value is None:
         return False
 
+    # Not enough events to meet min_count (need min_count-1 previous events, current counts as 1)
+    if len(recent_events) < min_count - 1:
+        return False
+
     count = 1
     # Check recent events in reverse (most recent first)
     for prev in reversed(recent_events[-min_count + 1:]):
