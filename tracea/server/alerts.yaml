@@ -1,0 +1,42 @@
+routes:
+  - issue_category: tool_error
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: task_failure
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: high_cost
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: high_latency
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: empty_response
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: model_error_5xx
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: rate_limit_hit
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: repeated_tool_call
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  - issue_category: infinite_loop
+    route_type: slack
+    webhook_url: "${SLACK_WEBHOOK_URL}"
+    rate_limit_rpm: 60
+  # Default fallback: generic HTTP webhook (for Zapier/Make bridge)
+  - issue_category: "*"
+    route_type: http
+    webhook_url: "${ALERT_WEBHOOK_URL}"
+    rate_limit_rpm: 60
