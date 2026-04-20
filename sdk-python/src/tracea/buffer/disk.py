@@ -91,7 +91,8 @@ class DiskBuffer:
 
     def _event_to_row(self, event: TracedEvent) -> dict:
         """Serialize a TracedEvent to a DB row dict."""
-        return {
+        # Build a serializable dict from the event (UUIDs -> strings)
+        event_dict = {
             "event_id": str(event.event_id),
             "session_id": str(event.session_id),
             "agent_id": event.agent_id,
@@ -110,8 +111,10 @@ class DiskBuffer:
             "tokens_used_json": json.dumps(event.tokens_used.__dict__) if event.tokens_used else None,
             "cost_usd": event.cost_usd,
             "metadata_json": json.dumps(event.metadata),
-            "raw_json": json.dumps(event.__dict__),
         }
+        # raw_json uses serializable version (not event.__dict__ which has UUIDs)
+        event_dict["raw_json"] = json.dumps(event_dict)
+        return event_dict
 
     async def write(self, event: TracedEvent) -> None:
         """Write a single event to disk. Idempotent (INSERT OR IGNORE for dedup)."""
@@ -159,9 +162,10 @@ class DiskBuffer:
             chunk_size = 100
 
             while True:
-                rows = await db.fetchall("""
+                cursor = await db.execute("""
                     SELECT * FROM events ORDER BY timestamp ASC LIMIT ?
                 """, (chunk_size,))
+                rows = await cursor.fetchall()
                 if not rows:
                     break
 

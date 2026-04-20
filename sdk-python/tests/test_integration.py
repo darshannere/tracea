@@ -36,24 +36,26 @@ def mock_api_client_failure():
     return client
 
 
+def make_event(sequence: int = 0) -> TracedEvent:
+    """Factory to create a test TracedEvent."""
+    return TracedEvent(
+        event_id=uuid4(),
+        session_id=uuid4(),
+        agent_id="test",
+        sequence=sequence,
+        type="chat.completion",
+        provider="openai",
+        model="gpt-4o",
+    )
+
+
 @pytest.mark.asyncio
 async def test_batch_buffer_flush_on_count(mock_api_client_success):
     """BatchBuffer flushes when 50 events are added."""
     disk_buffer = MagicMock(spec=DiskBuffer)
     buffer = BatchBuffer(api_client=mock_api_client_success, disk_buffer=disk_buffer)
 
-    events = [
-        TracedEvent(
-            event_id=uuid4(),
-            session_id=uuid4(),
-            agent_id="test",
-            sequence=i,
-            type="chat.completion",
-            provider="openai",
-            model="gpt-4o",
-        )
-        for i in range(50)
-    ]
+    events = [make_event(sequence=i) for i in range(50)]
 
     for event in events:
         await buffer.add(event)
@@ -71,17 +73,10 @@ async def test_batch_buffer_overflow_to_disk(mock_api_client_failure):
 
     buffer = BatchBuffer(api_client=mock_api_client_failure, disk_buffer=disk_buffer)
 
-    event = TracedEvent(
-        event_id=uuid4(),
-        session_id=uuid4(),
-        agent_id="test",
-        sequence=0,
-        type="chat.completion",
-        provider="openai",
-        model="gpt-4o",
-    )
+    event = make_event()
     await buffer.add(event)
-    await asyncio.sleep(0.1)
+    # Force flush immediately (threshold is 50, timer is 1s)
+    await buffer.flush_now()
 
     disk_buffer.write_batch.assert_called_once()
 
@@ -98,38 +93,29 @@ async def test_batch_buffer_drain_disk_buffer_on_reconnect(tmp_path):
     db_path = os.path.join(tmp_path, "test_drain_reconnect.db")
     disk_buffer = DiskBuffer(db_path=db_path)
 
-    # Simulate server was down: API client fails first
-    api_client = MagicMock(spec=TraceaAPIClient)
-    flush_count = [0]
+    # Track calls; first fails, second succeeds
+    post_calls = []
 
     async def mock_post_events(events):
-        flush_count[0] += 1
+        post_calls.append(len(events))
+        if len(post_calls) == 1:
+            raise ConnectionError("Server down")
         return len(events)
 
-    api_client.post_events = AsyncMock(side_effect=[
-        ConnectionError("Server down"),  # First call fails
-        mock_post_events,                # Second call succeeds (drain)
-    ])
+    api_client = MagicMock(spec=TraceaAPIClient)
+    api_client.post_events = AsyncMock(side_effect=mock_post_events)
 
     buffer = BatchBuffer(api_client=api_client, disk_buffer=disk_buffer)
 
     # Step 1: Add events while server is down — should overflow to disk
-    events = [
-        TracedEvent(
-            event_id=uuid4(),
-            session_id=uuid4(),
-            agent_id="test",
-            sequence=i,
-            type="chat.completion",
-            provider="openai",
-            model="gpt-4o",
-        )
-        for i in range(5)
-    ]
+    events = [make_event(sequence=i) for i in range(5)]
 
     for event in events:
         await buffer.add(event)
-    await asyncio.sleep(0.1)
+    # Force flush immediately (threshold is 50, timer is 1s)
+    await buffer.flush_now()
+    # Allow the disk write to complete
+    await asyncio.sleep(0.05)
 
     disk_count = await disk_buffer.count()
     assert disk_count == 5, f"Expected 5 events on disk, got {disk_count}"
@@ -138,7 +124,7 @@ async def test_batch_buffer_drain_disk_buffer_on_reconnect(tmp_path):
     flushed = await buffer.drain_disk_buffer()
 
     assert flushed == 5, f"Expected 5 events flushed, got {flushed}"
-    assert flush_count[0] == 1, f"Expected 1 flush call after reconnect, got {flush_count[0]}"
+    assert len(post_calls) == 2, f"Expected 2 post_events calls, got {len(post_calls)}"
 
     # Step 3: Verify events deleted from disk after successful drain
     remaining = await disk_buffer.count()
@@ -153,15 +139,7 @@ async def test_disk_buffer_persistence(tmp_path):
     db_path = os.path.join(tmp_path, "test_persistence.db")
 
     buffer1 = DiskBuffer(db_path=db_path)
-    event = TracedEvent(
-        event_id=uuid4(),
-        session_id=uuid4(),
-        agent_id="test",
-        sequence=0,
-        type="chat.completion",
-        provider="openai",
-        model="gpt-4o",
-    )
+    event = make_event()
     await buffer1.write(event)
     count1 = await buffer1.count()
     assert count1 == 1
@@ -181,18 +159,7 @@ async def test_disk_buffer_drain(tmp_path):
     buffer = DiskBuffer(db_path=db_path)
 
     # Write 5 events
-    events = [
-        TracedEvent(
-            event_id=uuid4(),
-            session_id=uuid4(),
-            agent_id="test",
-            sequence=i,
-            type="chat.completion",
-            provider="openai",
-            model="gpt-4o",
-        )
-        for i in range(5)
-    ]
+    events = [make_event(sequence=i) for i in range(5)]
     await buffer.write_batch(events)
     assert await buffer.count() == 5
 
@@ -210,56 +177,28 @@ async def test_disk_buffer_drain(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_events_in_db():
-    """PYS-12: End-to-end test — event emitted through patched httpx lands in buffer.
+async def test_end_to_end_events_in_buffer():
+    """PYS-12: End-to-end test — event added to BatchBuffer lands in API post_events.
 
-    This test verifies the full path:
-    1. tracea.init() + patch() installs httpx patches
-    2. httpx patched send() emits TracedEvent
-    3. Event is added to BatchBuffer via buffer.add()
-
-    We mock the API client to capture the event rather than needing a real server.
+    This test verifies:
+    1. A real BatchBuffer + mock API client
+    2. Event is added to buffer
+    3. flush_now() forces flush and API post_events is called
     """
-    from unittest.mock import AsyncMock, MagicMock, patch
-    from tracea.patch.httpx import patch as httpx_patch, unpatch
-
-    # Setup: mock API client
     captured_events = []
     mock_api = MagicMock(spec=TraceaAPIClient)
     mock_api.post_events = AsyncMock(side_effect=lambda e: (captured_events.extend(e), len(e)))
 
-    with patch('tracea.buffer.batch.TraceaAPIClient', return_value=mock_api):
-        with patch('tracea.buffer.get_buffer') as mock_get_buffer:
-            # Create a real BatchBuffer with mocked API
-            real_disk_buffer = MagicMock(spec=DiskBuffer)
-            real_disk_buffer.count = AsyncMock(return_value=0)
-            real_buffer = BatchBuffer(api_client=mock_api, disk_buffer=real_disk_buffer)
-            mock_get_buffer.return_value = real_buffer
+    disk_buffer = MagicMock(spec=DiskBuffer)
+    disk_buffer.write_batch = AsyncMock()
 
-            # Install patches
-            httpx_patch()
+    buffer = BatchBuffer(api_client=mock_api, disk_buffer=disk_buffer)
 
-            try:
-                # Create and emit a test event (simulating what patched send would do)
-                event = TracedEvent(
-                    event_id=uuid4(),
-                    session_id=uuid4(),
-                    agent_id="test-agent",
-                    sequence=0,
-                    type="chat.completion",
-                    provider="openai",
-                    model="gpt-4o",
-                    content="Hello, world!",
-                    status_code=200,
-                    duration_ms=150,
-                )
+    event = make_event()
+    await buffer.add(event)
+    await buffer.flush_now()
+    await asyncio.sleep(0.05)
 
-                # Add event to buffer (what _emit_event does)
-                await real_buffer.add(event)
-                await asyncio.sleep(0.1)  # Allow flush
-
-                # Verify event was flushed to API
-                assert len(captured_events) > 0 or mock_api.post_events.called
-
-            finally:
-                unpatch()
+    # Verify event was captured via post_events
+    assert len(captured_events) == 1
+    assert captured_events[0].event_id == event.event_id
