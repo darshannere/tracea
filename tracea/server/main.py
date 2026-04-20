@@ -74,6 +74,23 @@ static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
+
+@app.get("/static/index.html")
+async def dashboard_with_config():
+    """Serve dashboard index.html with TRACEA_RCA_BACKEND injected."""
+    import os
+    rca_backend = os.getenv("TRACEA_RCA_BACKEND", "disabled")
+    index_path = os.path.join(static_dir, "index.html")
+    if not os.path.exists(index_path):
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("Dashboard not found", status_code=404)
+    with open(index_path) as f:
+        html = f.read()
+    inject = f'<script>window.TRACEA_RCA_BACKEND = "{rca_backend}";</script>'
+    html = html.replace('</head>', f'{inject}</head>')
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html)
+
 from tracea.server.routes.ingest import router as ingest_router
 from tracea.server.routes.sessions import router as sessions_router
 from tracea.server.routes.issues import router as issues_router
