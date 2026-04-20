@@ -129,7 +129,20 @@ def _emit_event(event: TracedEvent) -> None:
     """Emit event to buffer. Deferred import to avoid circular deps."""
     try:
         from tracea.buffer import get_buffer
-        get_buffer().add(event)
+        buffer = get_buffer()
+        # add() is async — run it in a background thread with its own event loop
+        import threading
+        def _emit():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    loop.run_until_complete(buffer.add(event))
+                finally:
+                    loop.close()
+            except Exception:
+                pass
+        threading.Thread(target=_emit, daemon=True).start()
     except (ImportError, RuntimeError):
         # Buffer not yet initialized — log for debugging
         import logging
