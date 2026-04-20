@@ -2,10 +2,10 @@
 
 import asyncio
 import os
-import time
 import httpx
 from tracea.server.alerts.router import get_route_for_issue
 from tracea.server.alerts.formatters import format_alert_payload
+from tracea.server.alerts.backoff import exponential_backoff_with_jitter
 from tracea.server.db import get_db
 
 _DISPATCH_QUEUE: asyncio.Queue = asyncio.Queue()
@@ -18,14 +18,6 @@ _BASE_URL = os.getenv("TRACEA_BASE_URL", "http://localhost:8080")
 async def enqueue_issue(issue: dict) -> None:
     """Called by detection engine or ingest route when an issue is created."""
     await _DISPATCH_QUEUE.put(issue)
-
-
-async def _exponential_backoff(attempt: int) -> float:
-    """Calculate sleep time for exponential backoff with jitter."""
-    import random
-    base_delay = 2 ** attempt  # 2, 4, 8 seconds
-    jitter = random.uniform(0, 0.5)
-    return base_delay + jitter
 
 
 async def _send_webhook(route_type: str, webhook_url: str, payload: dict) -> tuple[bool, str]:
@@ -93,7 +85,7 @@ async def _dispatch_loop() -> None:
                 break
             last_error = err
             if attempt < _RETRY_ATTEMPTS - 1:
-                delay = await _exponential_backoff(attempt)
+                delay = await exponential_backoff_with_jitter(attempt)
                 await asyncio.sleep(delay)
 
         if not success:
