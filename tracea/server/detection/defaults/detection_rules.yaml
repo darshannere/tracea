@@ -1,0 +1,99 @@
+rules:
+  - id: tool_error
+    description: "LLM API call returned an error"
+    condition:
+      exists: error
+    issue_category: tool_error
+    severity: high
+
+  - id: task_failure
+    description: "Error event type indicates task failure"
+    condition:
+      field: type
+      op: equals
+      value: "error"
+    issue_category: task_failure
+    severity: critical
+
+  - id: high_cost
+    description: "Individual call cost exceeds $0.05 (flags GPT-4o-class calls)"
+    condition:
+      field: cost_usd
+      op: gt
+      value: 0.05
+    issue_category: high_cost
+    severity: high
+
+  - id: high_latency
+    description: "Call duration exceeds 30 seconds (tool calls can legitimately take 10-30s)"
+    condition:
+      field: duration_ms
+      op: gt
+      value: 30000
+    issue_category: high_latency
+    severity: medium
+
+  - id: empty_response
+    description: "LLM returned empty content on chat.completion or tool_result"
+    condition:
+      or:
+        - and:
+            - field: type
+              op: equals
+              value: "chat.completion"
+            - field: content
+              op: eq
+              value: ""
+        - and:
+            - field: type
+              op: equals
+              value: "tool_result"
+            - field: content
+              op: eq
+              value: ""
+    issue_category: empty_response
+    severity: medium
+
+  - id: model_error_5xx
+    description: "Model provider returned 5xx error"
+    condition:
+      and:
+        - field: status_code
+          op: gte
+          value: 500
+        - field: status_code
+          op: lt
+          value: 600
+    issue_category: model_error_5xx
+    severity: high
+
+  - id: rate_limit_hit
+    description: "API returned 429 rate limit response"
+    condition:
+      field: status_code
+      op: eq
+      value: 429
+    issue_category: rate_limit_hit
+    severity: high
+
+  - id: repeated_tool_call
+    description: "Same tool called 5+ times in a row"
+    condition:
+      field: tool_name
+      op: exists
+    repetition:
+      field: tool_name
+      min_count: 5
+    issue_category: repeated_tool_call
+    severity: medium
+
+  - id: infinite_loop
+    description: "Same tool called 10+ times in a row (likely infinite loop)"
+    condition:
+      field: tool_name
+      op: exists
+    repetition:
+      field: tool_name
+      min_count: 10
+    issue_category: infinite_loop
+    severity: critical
