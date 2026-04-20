@@ -7,9 +7,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 
 from tracea.server.db import init_db, close_db, get_db
+from tracea.server.detection.watcher import start_watching, stop_watching
 
 start_time = time.time()
 _retention_task: asyncio.Task | None = None
+_watcher_task: asyncio.Task | None = None
 
 
 async def retention_cleanup():
@@ -33,12 +35,14 @@ async def retention_cleanup():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _retention_task
+    global _retention_task, _watcher_task
     await init_db()
     _retention_task = asyncio.create_task(retention_cleanup())
+    await start_watching()
     yield
     if _retention_task:
         _retention_task.cancel()
+    await stop_watching()
     await close_db()
 
 
