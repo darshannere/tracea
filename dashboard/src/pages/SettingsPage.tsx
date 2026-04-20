@@ -60,6 +60,7 @@ export function SettingsPage() {
         content: res.data.content || '',
         loaded: true,
         loading: false,
+        saving: false,
         error: undefined,
       })
     } catch (e: unknown) {
@@ -80,6 +81,7 @@ export function SettingsPage() {
         content: res.data.content || '',
         loaded: true,
         loading: false,
+        saving: false,
         error: undefined,
       })
     } catch (e: unknown) {

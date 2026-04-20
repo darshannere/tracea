@@ -70,17 +70,20 @@ async def root():
     return RedirectResponse(url="/static/index.html")
 
 
+# React SPA build output at dashboard/dist/
+dashboard_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashboard", "dist")
+# Fallback: vanilla JS dashboard in tracea/server/static/
 static_dir = os.path.join(os.path.dirname(__file__), "static")
-if os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 
 @app.get("/static/index.html")
 async def dashboard_with_config():
     """Serve dashboard index.html with TRACEA_RCA_BACKEND injected."""
-    import os
     rca_backend = os.getenv("TRACEA_RCA_BACKEND", "disabled")
-    index_path = os.path.join(static_dir, "index.html")
+    # Prefer React SPA build, fall back to vanilla JS
+    index_path = os.path.join(dashboard_dist, "index.html")
+    if not os.path.exists(index_path):
+        index_path = os.path.join(static_dir, "index.html")
     if not os.path.exists(index_path):
         from fastapi.responses import PlainTextResponse
         return PlainTextResponse("Dashboard not found", status_code=404)
@@ -91,13 +94,22 @@ async def dashboard_with_config():
     from fastapi.responses import HTMLResponse
     return HTMLResponse(content=html)
 
+
+# Mount static files (React SPA preferred, vanilla JS fallback)
+if os.path.exists(dashboard_dist):
+    app.mount("/static", StaticFiles(directory=dashboard_dist), name="static")
+elif os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
 from tracea.server.routes.ingest import router as ingest_router
 from tracea.server.routes.sessions import router as sessions_router
 from tracea.server.routes.issues import router as issues_router
+from tracea.server.routes.config import router as config_router
 
 app.include_router(ingest_router)
 app.include_router(sessions_router)
 app.include_router(issues_router)
+app.include_router(config_router)
 
 
 def create_app() -> FastAPI:
