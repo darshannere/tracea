@@ -1,6 +1,8 @@
 """DetectionEngine — evaluates rules against ingested events asynchronously."""
 import asyncio
+import json
 from typing import Optional
+from uuid import uuid4
 from tracea.server.detection.watcher import get_rules
 from tracea.server.detection.conditions import evaluate_condition, check_repetition
 
@@ -161,20 +163,87 @@ async def run_detection(events: list) -> None:
 
 
 async def _create_issue(event, rule: dict, event_dict: dict) -> None:
-    """Write an issue to the SQLite database."""
-    from tracea.server.db import get_db
-    from uuid import uuid4
-
+    """Write an issue to the SQLite database with full DET-08 metadata."""
     issue_id = str(uuid4())
     session_id = str(getattr(event, 'session_id', event_dict.get('session_id', '')))
     event_id = str(getattr(event, 'event_id', event_dict.get('event_id', '')))
 
+    # Build captured_values snapshot (what triggered the rule)
+    condition = rule.get('condition', {})
+    if 'exists' in condition:
+        field_name = condition['exists']
+        field_value = event_dict.get(field_name, '')
+        op_used = 'exists'
+        threshold_used = None
+    elif 'field' in condition:
+        field_name = condition.get('field', '')
+        field_value = event_dict.get(field_name, '')
+        op_used = condition.get('op', '')
+        threshold_used = condition.get('value')
+    else:
+        field_name = ''
+        field_value = ''
+        op_used = ''
+        threshold_used = None
+
+    captured_values = json.dumps({
+        'field': field_name,
+        'op': op_used,
+        'value': field_value,
+        'threshold': threshold_used,
+        'triggered_event_id': event_id,
+    })
+
+    # Session aggregates (query at detection time for v0.1)
+    session_cost = 0.0
+    session_duration = 0
+    session_event_count = 0
     try:
+        from tracea.server.db import get_db
+        db_gen = get_db()
+        db = await db_gen.__anext__()
+
+        cursor = await db.execute(
+            "SELECT SUM(cost_usd) as total_cost, SUM(duration_ms) as total_duration, COUNT(*) as event_count FROM events WHERE session_id = ?",
+            (session_id,)
+        )
+        row = await cursor.fetchone()
+        if row:
+            session_cost = row['total_cost'] or 0.0
+            session_duration = row['total_duration'] or 0
+            session_event_count = row['event_count'] or 0
+    except Exception:
+        pass
+
+    # First/last event IDs
+    first_event_id = event_id
+    last_event_id = event_id
+
+    # Error message
+    error_msg = event_dict.get('error', '') or ''
+
+    # Session metadata from tracea.session(metadata={...}) — stored in event.metadata
+    session_meta = {}
+    metadata_val = getattr(event, 'metadata', {}) or {}
+    if isinstance(metadata_val, dict):
+        session_meta = metadata_val.get('session_metadata', {})
+    session_metadata_json = json.dumps(session_meta)
+
+    # Rule config snapshot
+    rule_config_snapshot = json.dumps(rule)
+
+    try:
+        from tracea.server.db import get_db
         db_gen = get_db()
         db = await db_gen.__anext__()
         await db.execute("""
-            INSERT INTO issues (issue_id, session_id, event_id, rule_name, issue_type, severity, rca_status)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending')
+            INSERT INTO issues (
+                issue_id, session_id, event_id, rule_name, issue_type, severity,
+                rca_status, rule_id, rule_description, captured_values,
+                session_cost_total, session_duration_ms, session_event_count,
+                first_event_id, last_event_id, error_message,
+                session_metadata, rule_config_snapshot
+            ) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             issue_id,
             session_id,
@@ -182,8 +251,19 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
             rule.get('id', ''),
             rule.get('issue_category', ''),
             rule.get('severity', 'medium'),
+            rule.get('id', ''),          # rule_id
+            rule.get('description', ''),  # rule_description
+            captured_values,
+            session_cost,
+            session_duration,
+            session_event_count,
+            first_event_id,
+            last_event_id,
+            error_msg,
+            session_metadata_json,
+            rule_config_snapshot,
         ))
         await db.commit()
-        print(f"[tracea] Issue created: {rule.get('id', 'unknown')} for event {event_id}")
+        print(f"[tracea] Issue created: {rule.get('id', 'unknown')} ({rule.get('issue_category', '')}) for event {event_id}")
     except Exception as e:
         print(f"[tracea] Failed to create issue: {e}")
