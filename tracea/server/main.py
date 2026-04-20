@@ -8,10 +8,15 @@ from fastapi.responses import RedirectResponse
 
 from tracea.server.db import init_db, close_db, get_db
 from tracea.server.detection.watcher import start_watching, stop_watching
+from tracea.server.alerts.watcher import start_watching as start_alerts_watching, stop_watching as stop_alerts_watching
+from tracea.server.alerts.dispatcher import start_dispatcher, stop_dispatcher
+from tracea.server.rca.worker import start_worker, stop_worker
 
 start_time = time.time()
 _retention_task: asyncio.Task | None = None
 _watcher_task: asyncio.Task | None = None
+_dispatcher_task: asyncio.Task | None = None
+_rca_worker_task: asyncio.Task | None = None
 
 
 async def retention_cleanup():
@@ -35,14 +40,20 @@ async def retention_cleanup():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _retention_task, _watcher_task
+    global _retention_task, _watcher_task, _dispatcher_task, _rca_worker_task
     await init_db()
     _retention_task = asyncio.create_task(retention_cleanup())
     await start_watching()
+    await start_alerts_watching()   # alerts.yaml watcher
+    await start_dispatcher()       # AlertDispatcher
+    await start_worker()          # RCAWorker
     yield
     if _retention_task:
         _retention_task.cancel()
     await stop_watching()
+    await stop_alerts_watching()   # alerts.yaml watcher
+    await stop_dispatcher()        # AlertDispatcher
+    await stop_worker()           # RCAWorker
     await close_db()
 
 

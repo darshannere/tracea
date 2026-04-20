@@ -265,5 +265,20 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
         ))
         await db.commit()
         print(f"[tracea] Issue created: {rule.get('id', 'unknown')} ({rule.get('issue_category', '')}) for event {event_id}")
+
+        # Fire alert (does NOT wait for RCA — fire-and-forget)
+        asyncio.create_task(_enqueue_alert(issue_id, session_id, rule.get('issue_category', ''), severity))
     except Exception as e:
         print(f"[tracea] Failed to create issue: {e}")
+
+
+async def _enqueue_alert(issue_id: str, session_id: str, issue_type: str, severity: str) -> None:
+    """Enqueue issue for AlertDispatcher. Import lazily to avoid circular."""
+    from tracea.server.alerts.dispatcher import enqueue_issue
+    issue = {
+        "issue_id": issue_id,
+        "session_id": session_id,
+        "issue_type": issue_type,
+        "severity": severity,
+    }
+    await enqueue_issue(issue)
