@@ -7,7 +7,7 @@ from typing import Optional
 from tracea.server.alerts.models import AlertRoute, AlertsConfig, load_alerts_config
 from tracea.server.alerts.watcher import get_alerts_config
 
-_DEDUP_WINDOW = 300  # 5 minutes in seconds (per CONTEXT.md: 300 sec dedup window)
+_DEDUP_WINDOW = 60  # 60 seconds per ALT-05 requirement
 _dedup_cache: dict[tuple[str, str], float] = {}  # (session_id, issue_category) -> last_sent_ts
 _dedup_lock = asyncio.Lock()
 
@@ -83,7 +83,8 @@ async def get_route_for_issue(session_id: str, issue_category: str) -> Optional[
     if _is_duplicate(session_id, issue_category):
         return None
 
-    allowed = await _check_rate_limit_async(route.webhook_url, time.time(), _RATE_LIMIT_RPM / 60.0, _RATE_LIMIT_RPM)
+    route_rpm = route.rate_limit_rpm if route.rate_limit_rpm is not None else _RATE_LIMIT_RPM
+    allowed = await _check_rate_limit_async(route.webhook_url, time.time(), route_rpm / 60.0, route_rpm)
     if not allowed:
         return None
 
