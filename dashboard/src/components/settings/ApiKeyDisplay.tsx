@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils'
 
 export function ApiKeyDisplay() {
   const stored = localStorage.getItem('tracea_api_key') ?? ''
-  const [apiKey, setApiKey] = useState(stored)
+  const [apiKey] = useState<string>(stored)
   const [visible, setVisible] = useState(false)
   const [copied, setCopied] = useState(false)
 
