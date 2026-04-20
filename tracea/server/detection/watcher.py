@@ -13,6 +13,8 @@ async def reload_rules(path: str | None = None) -> None:
     """Reload rules atomically. Fail-closed: retain last valid set on any error."""
     global _rules
     try:
+        if path:
+            _loader.path = path
         rules = _loader.load()
         async with _rules_lock:
             _rules = rules
