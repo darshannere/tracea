@@ -1,0 +1,1 @@
+"""Event batch buffering logic."""

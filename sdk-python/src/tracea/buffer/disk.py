@@ -1,0 +1,1 @@
+"""Disk-backed event buffer for resilience."""

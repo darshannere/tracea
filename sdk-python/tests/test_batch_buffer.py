@@ -1,0 +1,1 @@
+"""Test batch event buffer."""
