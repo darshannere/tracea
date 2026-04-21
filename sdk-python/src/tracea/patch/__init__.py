@@ -28,17 +28,23 @@ def patch_client(client, base_url: str | None = None):
         if base_url is not None:
             http_client._tracea_base_url = base_url
 
-        # Patch the underlying httpx client's send method directly
-        from tracea.patch.httpx import _original_sync_send
-        if hasattr(http_client, "send") and http_client.send is not _original_sync_send:
-            # Already patched via class-level
+        # Reach the already-cached module to read live _is_patched and _patched_sync_send.
+        import sys as _sys
+        _httpx_mod = _sys.modules.get("tracea.patch.httpx")
+        if _httpx_mod is None:
+            raise RuntimeError("tracea.patch.httpx not yet loaded")
+
+        # If class-level patch is active, all httpx.Client instances are already covered.
+        if _httpx_mod._is_patched:
             return True
 
-        # Apply instance-level patch
-        import tracea.patch.httpx as _httpx_patch
-        http_client.send = lambda req, **kwargs: _httpx_patch._patched_sync_send(http_client, req, **kwargs)
+        # Class-level patch not active — apply an instance-level send patch.
+        _psend = _httpx_mod._patched_sync_send
+        http_client.send = lambda req, **kwargs: _psend(http_client, req, **kwargs)
         return True
-    except Exception:
+    except Exception as _e:
+        import logging as _log
+        _log.getLogger("tracea").warning(f"patch_client failed: {_e!r}")
         return False
 
 __all__ = ["patch", "unpatch", "patch_client"]

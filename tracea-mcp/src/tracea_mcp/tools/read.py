@@ -1,5 +1,7 @@
 """Read tool handler."""
+import itertools
 import os
+import stat
 from tracea_mcp.tools.base import BaseTool, ToolResult
 
 
@@ -37,7 +39,7 @@ class ReadTool(BaseTool):
         }
 
     async def execute(self, args: dict) -> ToolResult:
-        file_path = os.path.expanduser(args["file_path"])
+        file_path = os.path.realpath(os.path.expanduser(args["file_path"]))
         offset = args.get("offset", 0)
         limit = args.get("limit")
 
@@ -45,15 +47,19 @@ class ReadTool(BaseTool):
             if not os.path.exists(file_path):
                 return ToolResult(success=False, content="", error=f"File not found: {file_path}", exit_code=1)
 
+            # Check for special files
+            st = os.stat(file_path)
+            mode = st.st_mode
+            if stat.S_ISDIR(mode):
+                return ToolResult(success=False, content="", error=f"Cannot read a directory: {file_path}", exit_code=1)
+            if stat.S_ISFIFO(mode):
+                return ToolResult(success=False, content="", error=f"Cannot read a named pipe (FIFO): {file_path}", exit_code=1)
+            if stat.S_ISCHR(mode):
+                return ToolResult(success=False, content="", error=f"Cannot read a character device: {file_path}", exit_code=1)
+
             with open(file_path, "r", encoding="utf-8", errors="replace") as f:
-                lines = f.readlines()
-
-            if offset > 0:
-                lines = lines[offset:]
-            if limit:
-                lines = lines[:limit]
-
-            content = "".join(lines)
+                lines = itertools.islice(f, offset, limit + offset if limit else None)
+                content = "".join(lines)
             return ToolResult(success=True, content=content, exit_code=0)
         except Exception as e:
             return ToolResult(success=False, content="", error=str(e), exit_code=1)

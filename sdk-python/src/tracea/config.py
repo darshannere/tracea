@@ -32,7 +32,7 @@ def init(
     if not resolved_api_key:
         raise ValueError("TRACEA_API_KEY must be set via param or env var")
 
-    resolved_server_url = server_url or os.environ.get("TRACEA_SERVER_URL", "http://localhost:8000")
+    resolved_server_url = server_url or os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
     resolved_base_url = base_url or os.environ.get("TRACEA_BASE_URL", resolved_server_url)
     resolved_metadata = metadata or {}
     resolved_tags = tags or []

@@ -43,7 +43,14 @@ async def get_session_events(
     _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
-    rows = await db.execute("SELECT * FROM events WHERE session_id = ? ORDER BY sequence ASC LIMIT ?", (session_id, limit))
+    rows = await db.execute(
+        """SELECT *,
+               type           AS event_type,
+               total_tokens   AS tokens_used,
+               error          AS error_message
+           FROM events WHERE session_id = ? ORDER BY sequence ASC LIMIT ?""",
+        (session_id, limit)
+    )
     return {"events": [dict(e) for e in await rows.fetchall()]}
 
 

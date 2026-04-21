@@ -22,11 +22,13 @@ async def list_issues(
     else:
         detected_before, issue_before = None, None
 
+    # Alias issue_type → issue_category to match the frontend model
+    select = "SELECT *, issue_type AS issue_category FROM issues"
     if session_id:
-        q = "SELECT * FROM issues WHERE session_id = ? AND (detected_at, issue_id) < (?, ?) ORDER BY detected_at DESC LIMIT ?" if cursor else "SELECT * FROM issues WHERE session_id = ? ORDER BY detected_at DESC LIMIT ?"
+        q = f"{select} WHERE session_id = ? AND (detected_at, issue_id) < (?, ?) ORDER BY detected_at DESC LIMIT ?" if cursor else f"{select} WHERE session_id = ? ORDER BY detected_at DESC LIMIT ?"
         params = (session_id, detected_before, issue_before, limit + 1) if cursor else (session_id, limit + 1)
     else:
-        q = "SELECT * FROM issues WHERE (detected_at, issue_id) < (?, ?) ORDER BY detected_at DESC LIMIT ?" if cursor else "SELECT * FROM issues ORDER BY detected_at DESC LIMIT ?"
+        q = f"{select} WHERE (detected_at, issue_id) < (?, ?) ORDER BY detected_at DESC LIMIT ?" if cursor else f"{select} ORDER BY detected_at DESC LIMIT ?"
         params = (detected_before, issue_before, limit + 1) if cursor else (limit + 1,)
 
     rows = await db.execute(q, params)

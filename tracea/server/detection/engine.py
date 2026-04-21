@@ -263,6 +263,10 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
             session_metadata_json,
             rule_config_snapshot,
         ))
+        await db.execute(
+            "UPDATE sessions SET issue_count = issue_count + 1 WHERE session_id = ?",
+            (session_id,)
+        )
         await db.commit()
         print(f"[tracea] Issue created: {rule.get('id', 'unknown')} ({rule.get('issue_category', '')}) for event {event_id}")
 

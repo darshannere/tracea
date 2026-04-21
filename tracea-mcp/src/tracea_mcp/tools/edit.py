@@ -37,7 +37,7 @@ class EditTool(BaseTool):
         }
 
     async def execute(self, args: dict) -> ToolResult:
-        file_path = os.path.expanduser(args["file_path"])
+        file_path = os.path.realpath(os.path.expanduser(args["file_path"]))
         old_string = args["old_string"]
         new_string = args["new_string"]
 

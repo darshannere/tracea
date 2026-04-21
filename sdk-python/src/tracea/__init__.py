@@ -55,7 +55,7 @@ def init(
     Args:
         api_key: Your tracea API key. Defaults to TRACEA_API_KEY env var.
         server_url: Your tracea server URL. Defaults to TRACEA_SERVER_URL env var
-                    or "http://localhost:8000".
+                    or "http://localhost:8080".
         base_url: Base URL for LLM API calls (for Azure OpenAI, proxies, etc.).
                   Defaults to TRACEA_BASE_URL env var or server_url.
         metadata: Global metadata applied to all events.

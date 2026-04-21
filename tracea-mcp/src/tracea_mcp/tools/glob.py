@@ -39,7 +39,7 @@ class GlobTool(BaseTool):
 
         try:
             matches = []
-            for root, dirs, files in os.walk(base_dir):
+            for root, dirs, files in os.walk(base_dir, followlinks=False):
                 dirs[:] = [d for d in dirs if not d.startswith(".")]
                 for fname in files:
                     if fnmatch.fnmatch(fname, pattern) or fnmatch.fnmatch(os.path.join(root, fname), pattern):

@@ -13,6 +13,9 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       window.dispatchEvent(new CustomEvent('tracea:auth-error'))
+    } else if (!error.response) {
+      // Network error — backend is unreachable (connection refused, DNS failure, etc.)
+      window.dispatchEvent(new CustomEvent('tracea:connection-error'))
     }
     return Promise.reject(error)
   }

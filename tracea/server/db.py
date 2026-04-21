@@ -175,13 +175,13 @@ async def enqueue_events(events: list[TracedEvent]) -> None:
             event.content or "",
             event.tool_call_id or "",
             event.tool_name or "",
-            str(event.status_code or ""),
+            event.status_code,           # None → NULL, not ""
             event.error or "",
             event.duration_ms,
-            str(tokens.input if tokens else 0) if tokens else "0",
-            str(tokens.output if tokens else 0) if tokens else "0",
-            str(tokens.total if tokens else 0) if tokens else "0",
-            str(event.cost_usd or ""),
+            tokens.input if tokens else 0,
+            tokens.output if tokens else 0,
+            tokens.total if tokens else 0,
+            event.cost_usd,              # None → NULL, not ""
             json.dumps(event.metadata),
         ))
         # Check if we need to flush
@@ -221,6 +221,45 @@ async def flush_events() -> int:
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             batch
         )
+
+        # Upsert sessions derived from the events we just wrote.
+        # We re-aggregate from the full events table so partial batches
+        # don't produce stale totals.
+        session_ids = list({row[1] for row in batch})  # row[1] = session_id
+        for sid in session_ids:
+            await _db.execute(
+                """
+                INSERT INTO sessions
+                    (session_id, agent_id, started_at, ended_at, last_event_at,
+                     duration_ms, event_count, total_cost, total_tokens)
+                SELECT
+                    session_id,
+                    MAX(agent_id),
+                    MIN(timestamp),
+                    MAX(CASE WHEN type = 'session_end' THEN timestamp END),
+                    MAX(timestamp),
+                    CAST(
+                        (julianday(MAX(timestamp)) - julianday(MIN(timestamp)))
+                        * 86400000 AS INTEGER
+                    ),
+                    COUNT(*),
+                    ROUND(SUM(COALESCE(cost_usd, 0.0)), 6),
+                    SUM(COALESCE(total_tokens, 0))
+                FROM events
+                WHERE session_id = ?
+                GROUP BY session_id
+                ON CONFLICT(session_id) DO UPDATE SET
+                    agent_id      = excluded.agent_id,
+                    ended_at      = excluded.ended_at,
+                    last_event_at = excluded.last_event_at,
+                    duration_ms   = excluded.duration_ms,
+                    event_count   = excluded.event_count,
+                    total_cost    = excluded.total_cost,
+                    total_tokens  = excluded.total_tokens
+                """,
+                (sid,)
+            )
+
         await _db.commit()
     except Exception:
         await _db.rollback()

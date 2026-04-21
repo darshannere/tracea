@@ -55,7 +55,7 @@ def get_client() -> TraceaAPIClient:
     global _client
     if _client is None:
         api_key = os.environ.get("TRACEA_API_KEY", "")
-        server_url = os.environ.get("TRACEA_SERVER_URL", "http://localhost:8000")
+        server_url = os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
         _client = TraceaAPIClient(server_url, api_key)
     return _client
 

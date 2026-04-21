@@ -54,7 +54,7 @@ def _build_event(
     stream_content: str | None,
 ) -> TracedEvent:
     """Build a TracedEvent from captured request/response data."""
-    from datetime import datetime
+    from datetime import datetime, timezone
     from tracea.config import get_config
 
     try:
@@ -97,7 +97,7 @@ def _build_event(
         session_id=session_id,
         agent_id=ctx.get("agent_id", ""),
         sequence=_get_next_sequence(session_id),
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         type="chat.completion",
         provider=provider,
         model=model,
@@ -144,27 +144,51 @@ def _estimate_cost(provider: str, model: str, tokens: TokenUsage) -> float | Non
     return None
 
 def _emit_event(event: TracedEvent) -> None:
-    """Emit event to buffer. Deferred import to avoid circular deps."""
+    """Emit event to buffer. Calls async buffer.add() from sync httpx send path.
+
+    When called from sync code within an active asyncio context (e.g., pytest),
+    run the async add() in a background thread with its own event loop and wait
+    for it to complete before returning. This ensures the event is in the buffer
+    when flush_now() is called after the sync API call returns.
+
+    When called with no active event loop, use asyncio.run() directly.
+    """
     try:
         from tracea.buffer import get_buffer
         buffer = get_buffer()
-        # add() is async — run it in a background thread with its own event loop
-        import threading
-        def _emit():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        if running_loop is not None:
+            # Called from sync code within an active asyncio context.
+            # Run in a background thread with its own event loop, then block
+            # the calling thread until the add() completes.
+            import threading
+            result_holder = [None, None]  # [event, exception]
+
+            def _thread_target():
+                event_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(event_loop)
                 try:
-                    loop.run_until_complete(buffer.add(event))
+                    event_loop.run_until_complete(buffer.add(event))
+                except Exception as exc:
+                    result_holder[1] = exc
                 finally:
-                    loop.close()
-            except Exception:
-                pass
-        threading.Thread(target=_emit, daemon=True).start()
-    except (ImportError, RuntimeError):
-        # Buffer not yet initialized — log for debugging
+                    event_loop.close()
+
+            thread = threading.Thread(target=_thread_target, daemon=True)
+            thread.start()
+            thread.join()  # Block until the thread completes
+            if result_holder[1] is not None:
+                raise result_holder[1]
+        else:
+            # No running loop — use asyncio.run()
+            asyncio.run(buffer.add(event))
+    except Exception as exc:
         import logging
-        logging.getLogger("tracea").debug(f"Event: {event}")
+        logging.getLogger("tracea").error(f"_emit_event failed: {exc}")
 
 def _patched_sync_send(self, request: httpx.Request, **kwargs) -> httpx.Response:
     """Patched httpx.Client.send — sync path."""

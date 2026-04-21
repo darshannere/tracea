@@ -75,6 +75,17 @@ class MCPServer:
                     },
                 }
                 self.transport.write_response(msg_id, result)
+                # Emit session_start event now that the session is live
+                await self.post_events([{
+                    "event_id": str(uuid.uuid4()),
+                    "session_id": self.session.session_id,
+                    "agent_id": self.agent_id,
+                    "sequence": next_sequence_for(self.session.session_id),
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "type": "session_start",
+                    "provider": self.agent_id,
+                    "metadata": {"integration": "tracea-mcp"},
+                }])
 
             elif method == "tools/list":
                 tools = self.registry.list_tools()
@@ -108,7 +119,9 @@ class MCPServer:
             elif method == "shutdown":
                 self.transport.write_response(msg_id, None)
                 self.running = False
-                loop.stop()
+                # Do NOT call loop.stop() — it causes run_until_complete to raise
+                # RuntimeError.  The main loop exits naturally when self.running
+                # becomes False, then await shutdown() completes cleanly.
 
             else:
                 # Unknown method — ignore
