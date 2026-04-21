@@ -6,6 +6,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { YamlEditor } from '@/components/settings/YamlEditor'
 import { ApiKeyDisplay } from '@/components/settings/ApiKeyDisplay'
+import { RuleTemplates } from '@/components/settings/RuleTemplates'
+import { RulesHelpPanel } from '@/components/settings/RulesHelpPanel'
+import { AlertsHelpPanel } from '@/components/settings/AlertsHelpPanel'
 import api from '@/lib/api'
 
 function validateYaml(content: string): { valid: boolean; error?: string } {
@@ -14,7 +17,6 @@ function validateYaml(content: string): { valid: boolean; error?: string } {
     return { valid: true }
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e)
-    // Extract line info from yaml parse error
     const lineMatch = msg.match(/line (\d+)/i)
     const detail = lineMatch ? `${msg} (line ${lineMatch[1]})` : msg
     return { valid: false, error: detail }
@@ -94,7 +96,6 @@ export function SettingsPage() {
     }
   }, [])
 
-  // Lazy load on tab selection
   useEffect(() => {
     if (activeTab === 'alerts' && !alertsState.loaded && !alertsState.loading) {
       loadAlerts()
@@ -140,6 +141,23 @@ export function SettingsPage() {
     }
   }
 
+  const appendToRules = (yamlBlock: string) => {
+    setRulesState((s) => {
+      const current = s.content.trimEnd()
+      // If empty or just a comment, start fresh with boilerplate
+      if (!current || current === '# No content loaded yet') {
+        return { ...s, content: `rules:\n${yamlBlock}\n` }
+      }
+      // If content doesn't start with "rules:", prepend it
+      let next = current
+      if (!next.includes('rules:')) {
+        next = `rules:\n${next}`
+      }
+      // Append with a blank line separator
+      return { ...s, content: `${next}\n\n${yamlBlock}\n` }
+    })
+  }
+
   return (
     <div className="h-full flex flex-col space-y-6">
       <div className="flex items-center gap-3">
@@ -147,17 +165,18 @@ export function SettingsPage() {
         <h2 className="text-xl font-semibold">Settings</h2>
       </div>
 
-      {/* API Key Display */}
       <ApiKeyDisplay />
 
-      {/* YAML Editors */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)} className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between">
           <TabsList>
             <TabsTrigger value="alerts">alerts.yaml</TabsTrigger>
             <TabsTrigger value="rules">detection_rules.yaml</TabsTrigger>
           </TabsList>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {activeTab === 'rules' && (
+              <RuleTemplates onAppend={appendToRules} />
+            )}
             {activeTab === 'alerts' && (
               <Button
                 size="sm"
@@ -191,11 +210,18 @@ export function SettingsPage() {
               {alertsState.error}
             </div>
           ) : (
-            <YamlEditor
-              value={alertsState.content}
-              onChange={(v) => setAlertsState((s) => ({ ...s, content: v }))}
-              error={alertsState.error}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+              <div className="lg:col-span-2 h-full min-h-[300px]">
+                <YamlEditor
+                  value={alertsState.content}
+                  onChange={(v) => setAlertsState((s) => ({ ...s, content: v }))}
+                  error={alertsState.error}
+                />
+              </div>
+              <div className="h-full min-h-[200px]">
+                <AlertsHelpPanel />
+              </div>
+            </div>
           )}
         </TabsContent>
 
@@ -209,11 +235,18 @@ export function SettingsPage() {
               {rulesState.error}
             </div>
           ) : (
-            <YamlEditor
-              value={rulesState.content}
-              onChange={(v) => setRulesState((s) => ({ ...s, content: v }))}
-              error={rulesState.error}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-full">
+              <div className="lg:col-span-2 h-full min-h-[300px]">
+                <YamlEditor
+                  value={rulesState.content}
+                  onChange={(v) => setRulesState((s) => ({ ...s, content: v }))}
+                  error={rulesState.error}
+                />
+              </div>
+              <div className="h-full min-h-[200px]">
+                <RulesHelpPanel />
+              </div>
+            </div>
           )}
         </TabsContent>
       </Tabs>

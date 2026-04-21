@@ -4,8 +4,17 @@ import { usePolling } from '@/hooks/usePolling'
 import { useAuth } from '@/hooks/useAuth'
 import api from '@/lib/api'
 import { AuthErrorState } from '@/components/layout/AuthErrorState'
-import { MiniCostChart, MiniTokenChart } from '@/components/charts/MiniCharts'
-import { Clock, Zap, AlertCircle, ArrowUpDown } from 'lucide-react'
+import { StatCards } from '@/components/charts/StatCards'
+import {
+  CostChart,
+  TokenChart,
+  EventsChart,
+  DurationDistributionChart,
+  HealthChart,
+  HealthLegend,
+  CostPerSessionChart,
+} from '@/components/charts/InsightsCharts'
+import { Clock, Zap, AlertCircle, ArrowUpDown, BarChart3 } from 'lucide-react'
 import {
   Table,
   TableBody,
@@ -182,12 +191,14 @@ export function SessionsPage() {
   const aggregatedMetrics = useMemo(() => {
     const dailyCost: Record<string, number> = {}
     const dailyTokens: Record<string, number> = {}
+    const dailyEvents: Record<string, number> = {}
 
     sessions.forEach((s) => {
       if (!s.started_at) return
       const day = s.started_at.split('T')[0]
       dailyCost[day] = (dailyCost[day] ?? 0) + (s.total_cost ?? 0)
       dailyTokens[day] = (dailyTokens[day] ?? 0) + (s.total_tokens ?? 0)
+      dailyEvents[day] = (dailyEvents[day] ?? 0) + (s.event_count ?? 0)
     })
 
     const costSeries = Object.entries(dailyCost)
@@ -200,8 +211,18 @@ export function SessionsPage() {
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(-30)
 
-    return { costSeries, tokenSeries }
+    const eventsSeries = Object.entries(dailyEvents)
+      .map(([date, events]) => ({ date, events }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-30)
+
+    return { costSeries, tokenSeries, eventsSeries }
   }, [sessions])
+
+  const hasChartData =
+    aggregatedMetrics.costSeries.length > 0 ||
+    aggregatedMetrics.tokenSeries.length > 0 ||
+    aggregatedMetrics.eventsSeries.length > 0
 
   if (!hasKey) {
     return <AuthErrorState />
@@ -245,6 +266,7 @@ export function SessionsPage() {
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Zap className="h-5 w-5 text-accent" />
@@ -253,19 +275,77 @@ export function SessionsPage() {
         </div>
       </div>
 
-      {aggregatedMetrics.costSeries.length > 0 && (
-        <div className="grid grid-cols-2 gap-4">
-          <div className="border border-zinc-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-zinc-700 mb-3">Cost per Day</h3>
-            <MiniCostChart data={aggregatedMetrics.costSeries} />
+      {/* Stat Cards */}
+      <StatCards sessions={sessions} total={total} />
+
+      {/* Insights Charts */}
+      {hasChartData && (
+        <div className="space-y-4">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-zinc-500" />
+            <h3 className="text-sm font-semibold text-zinc-700">Insights</h3>
           </div>
-          <div className="border border-zinc-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-zinc-700 mb-3">Tokens per Day</h3>
-            <MiniTokenChart data={aggregatedMetrics.tokenSeries} />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {/* Cost per Day */}
+            {aggregatedMetrics.costSeries.length > 0 && (
+              <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                  Cost per Day
+                </h4>
+                <CostChart data={aggregatedMetrics.costSeries} />
+              </div>
+            )}
+
+            {/* Tokens per Day */}
+            {aggregatedMetrics.tokenSeries.length > 0 && (
+              <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                  Tokens per Day
+                </h4>
+                <TokenChart data={aggregatedMetrics.tokenSeries} />
+              </div>
+            )}
+
+            {/* Events per Day */}
+            {aggregatedMetrics.eventsSeries.length > 0 && (
+              <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                  Events per Day
+                </h4>
+                <EventsChart data={aggregatedMetrics.eventsSeries} />
+              </div>
+            )}
+
+            {/* Duration Distribution */}
+            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                Duration Distribution
+              </h4>
+              <DurationDistributionChart sessions={sessions} />
+            </div>
+
+            {/* Session Health */}
+            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                Session Health
+              </h4>
+              <HealthChart sessions={sessions} />
+              <HealthLegend sessions={sessions} />
+            </div>
+
+            {/* Cost per Session */}
+            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+                Cost per Session
+              </h4>
+              <CostPerSessionChart sessions={sessions} />
+            </div>
           </div>
         </div>
       )}
 
+      {/* Sessions Table */}
       <div className="border border-zinc-200 rounded-lg overflow-hidden">
         <Table>
           <TableHeader>

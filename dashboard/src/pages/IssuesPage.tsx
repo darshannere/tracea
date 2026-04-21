@@ -1,10 +1,12 @@
 import { useState, useMemo } from 'react'
-import { Link } from 'react-router-dom'
+
 import { usePolling } from '@/hooks/usePolling'
 import api from '@/lib/api'
 import * as Collapsible from '@radix-ui/react-collapsible'
-import { AlertCircle, ChevronDown, Loader2, CheckCircle2, XCircle, Minus, Clock, Slack, Webhook } from 'lucide-react'
+import { AlertCircle, ChevronDown, CheckCircle2, XCircle, Minus, Clock, Shield, Hourglass } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
+import { IssueDetailPanel } from '@/components/issues/IssueDetailPanel'
 
 type Severity = 'error' | 'warning' | 'info'
 type RcaStatus = 'pending' | 'done' | 'failed' | null
@@ -18,6 +20,14 @@ interface Issue {
   rca_status: RcaStatus
   rca_text?: string
   triggering_event_ids?: string[]
+  rule_description?: string
+  captured_values?: string
+  session_cost_total?: number
+  session_duration_ms?: number
+  session_event_count?: number
+  error_message?: string
+  rule_config_snapshot?: string
+  event_id?: string
   alert_delivery?: {
     slack_status?: string
     slack_retry_count?: number
@@ -42,17 +52,37 @@ function formatRelative(iso: string): string {
   return `${Math.floor(hrs / 24)}d ago`
 }
 
-function RcaStatusIcon({ status }: { status: RcaStatus }) {
+function RcaStatusBadge({ status }: { status: RcaStatus }) {
   if (status === 'pending') {
-    return <Loader2 className="h-3.5 w-3.5 text-yellow-500 animate-spin" />
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded" title="RCA pending">
+        <Hourglass className="h-3 w-3" />
+        Pending
+      </span>
+    )
   }
   if (status === 'done') {
-    return <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-green-600 bg-green-50 px-1.5 py-0.5 rounded" title="RCA complete">
+        <CheckCircle2 className="h-3 w-3" />
+        Done
+      </span>
+    )
   }
   if (status === 'failed') {
-    return <XCircle className="h-3.5 w-3.5 text-red-500" />
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded" title="RCA failed">
+        <XCircle className="h-3 w-3" />
+        Failed
+      </span>
+    )
   }
-  return <Minus className="h-3.5 w-3.5 text-zinc-400" />
+  return (
+    <span className="inline-flex items-center gap-1 text-xs text-zinc-500 bg-zinc-50 px-1.5 py-0.5 rounded" title="No RCA">
+      <Minus className="h-3 w-3" />
+      —
+    </span>
+  )
 }
 
 interface IssueCardProps {
@@ -61,7 +91,6 @@ interface IssueCardProps {
 
 function IssueCard({ issue }: IssueCardProps) {
   const [expanded, setExpanded] = useState(false)
-  const [alertExpanded, setAlertExpanded] = useState(false)
   const sev = SEVERITY_COLORS[issue.severity] ?? SEVERITY_COLORS.info
 
   return (
@@ -81,7 +110,7 @@ function IssueCard({ issue }: IssueCardProps) {
             <Clock className="h-3 w-3" />
             {formatRelative(issue.detected_at)}
           </span>
-          <RcaStatusIcon status={issue.rca_status} />
+          <RcaStatusBadge status={issue.rca_status} />
           <ChevronDown className={cn(
             'h-4 w-4 text-zinc-400 transition-transform',
             expanded ? 'rotate-180' : ''
@@ -89,81 +118,7 @@ function IssueCard({ issue }: IssueCardProps) {
         </div>
       </Collapsible.Trigger>
       <Collapsible.Content>
-        <div className="px-4 py-4 bg-zinc-50 border-b border-zinc-200 space-y-4">
-          {issue.rca_text && (
-            <div>
-              <h4 className="text-xs font-medium text-zinc-600 mb-1.5">RCA</h4>
-              <pre className="bg-zinc-100 rounded p-3 text-xs text-zinc-700 whitespace-pre-wrap font-mono">
-                {issue.rca_text}
-              </pre>
-            </div>
-          )}
-          {issue.triggering_event_ids && issue.triggering_event_ids.length > 0 && (
-            <div>
-              <h4 className="text-xs font-medium text-zinc-600 mb-1.5">Triggering Events</h4>
-              <div className="flex flex-wrap gap-2">
-                {issue.triggering_event_ids.map((eid) => (
-                  <Link
-                    key={eid}
-                    to={`/sessions/${issue.session_id}`}
-                    className="text-xs text-accent hover:underline font-mono bg-zinc-100 px-2 py-1 rounded"
-                  >
-                    {eid.slice(0, 8)}...
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-          {issue.alert_delivery && (
-            <Collapsible.Root open={alertExpanded} onOpenChange={setAlertExpanded}>
-              <Collapsible.Trigger asChild>
-                <button className="flex items-center gap-2 text-xs font-medium text-zinc-600 hover:text-zinc-900 transition-colors">
-                  <ChevronDown className={cn(
-                    'h-3 w-3 transition-transform',
-                    alertExpanded ? 'rotate-180' : ''
-                  )} />
-                  Alert Delivery Status
-                </button>
-              </Collapsible.Trigger>
-              <Collapsible.Content>
-                <div className="mt-2 space-y-2 pl-5">
-                  {issue.alert_delivery.slack_status && (
-                    <div className="flex items-center gap-2 text-xs text-zinc-600">
-                      <Slack className="h-3.5 w-3.5" />
-                      <span>Slack:</span>
-                      <span className={cn(
-                        'font-medium',
-                        issue.alert_delivery.slack_status === 'sent' ? 'text-green-600' :
-                          issue.alert_delivery.slack_status === 'failed' ? 'text-red-600' : 'text-yellow-600'
-                      )}>
-                        {issue.alert_delivery.slack_status}
-                      </span>
-                      {issue.alert_delivery.slack_retry_count != null && issue.alert_delivery.slack_retry_count > 0 && (
-                        <span className="text-zinc-400">(retry: {issue.alert_delivery.slack_retry_count})</span>
-                      )}
-                    </div>
-                  )}
-                  {issue.alert_delivery.webhook_status && (
-                    <div className="flex items-center gap-2 text-xs text-zinc-600">
-                      <Webhook className="h-3.5 w-3.5" />
-                      <span>Webhook:</span>
-                      <span className={cn(
-                        'font-medium',
-                        issue.alert_delivery.webhook_status === 'sent' ? 'text-green-600' :
-                          issue.alert_delivery.webhook_status === 'failed' ? 'text-red-600' : 'text-yellow-600'
-                      )}>
-                        {issue.alert_delivery.webhook_status}
-                      </span>
-                      {issue.alert_delivery.webhook_retry_count != null && issue.alert_delivery.webhook_retry_count > 0 && (
-                        <span className="text-zinc-400">(retry: {issue.alert_delivery.webhook_retry_count})</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </Collapsible.Content>
-            </Collapsible.Root>
-          )}
-        </div>
+        <IssueDetailPanel issue={issue} />
       </Collapsible.Content>
     </Collapsible.Root>
   )
@@ -195,6 +150,28 @@ export function IssuesPage() {
       else next.add(cat)
       return next
     })
+  }
+
+  if (data === null) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <Shield className="h-5 w-5 text-accent" />
+          <h2 className="text-xl font-semibold">Issues</h2>
+        </div>
+        <div className="space-y-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="border border-zinc-200 rounded-lg overflow-hidden">
+              <Skeleton className="h-11 w-full" />
+              <div className="p-4 space-y-3">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-4 w-1/2" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
   }
 
   if (error) {

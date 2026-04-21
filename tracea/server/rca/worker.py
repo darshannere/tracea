@@ -19,7 +19,7 @@ def _load_config() -> RCABackendConfig:
     return RCABackendConfig(
         backend=backend,
         model=os.getenv("TRACEA_RCA_MODEL"),
-        base_url=os.getenv("TRACEA_RCA_BASE_URL"),
+        base_url=os.getenv("TRACEA_RCA_BASE_URL") or os.getenv("ANTHROPIC_BASE_URL"),
         prompt_path=os.getenv("TRACEA_RCA_PROMPT_PATH"),
         redact_content=os.getenv("TRACEA_RCA_REDACT_CONTENT", "true").lower() == "true",
     )

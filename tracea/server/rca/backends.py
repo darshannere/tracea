@@ -81,17 +81,18 @@ class OpenAIBackend(RCABackend):
 
 
 class AnthropicBackend(RCABackend):
-    """Anthropic cloud backend."""
+    """Anthropic cloud backend. Supports custom base_url for Anthropic-compatible APIs."""
 
-    def __init__(self, model: str, api_key: str):
+    def __init__(self, model: str, api_key: str, base_url: str | None = None):
         self.model = model or "claude-sonnet-4-20250514"
         self.api_key = api_key
+        self.base_url = (base_url or "https://api.anthropic.com").rstrip("/")
 
     async def analyze(self, context: RCAContext, prompt: str | None = None) -> str:
         """Call Anthropic messages API."""
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                "https://api.anthropic.com/v1/messages",
+                f"{self.base_url}/v1/messages",
                 headers={
                     "x-api-key": self.api_key,
                     "anthropic-version": "2023-06-01",
@@ -107,7 +108,12 @@ class AnthropicBackend(RCABackend):
             )
             response.raise_for_status()
             data = response.json()
-            return data["content"][0]["text"]
+            # Anthropic-compatible APIs may return thinking blocks before text blocks
+            for block in data.get("content", []):
+                if block.get("type") == "text" and "text" in block:
+                    return block["text"]
+            # Fallback to first content block
+            return data["content"][0].get("text", "")
 
 
 def load_backend(config: RCABackendConfig) -> RCABackend:
@@ -141,6 +147,7 @@ def load_backend(config: RCABackendConfig) -> RCABackend:
         return AnthropicBackend(
             model=config.model or "claude-sonnet-4-20250514",
             api_key=api_key,
+            base_url=config.base_url,
         )
     else:
         raise ValueError(f"Unknown RCA backend: {backend_type}")
