@@ -15,7 +15,6 @@ dashboard/package-lock.json
 *.png
 
 # Temp / scratch files
-import_claude_logs.py
 run_detection.py
 seed_data.py
 tracea-mcp/_t.py
