@@ -67,7 +67,7 @@ async def health():
 
 @app.get("/")
 async def root():
-    return RedirectResponse(url="/static/index.html")
+    return RedirectResponse(url="/dashboard/")
 
 
 # React SPA build output at dashboard/dist/
@@ -76,11 +76,20 @@ dashboard_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dashb
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 
 
-@app.get("/static/index.html")
-async def dashboard_with_config():
-    """Serve dashboard index.html with TRACEA_RCA_BACKEND injected."""
+# Mount static files (React SPA preferred, vanilla JS fallback)
+# NOTE: /dashboard/ route handles index.html with config injection
+# so we mount assets only at /dashboard/assets
+if os.path.exists(dashboard_dist):
+    app.mount("/dashboard/assets", StaticFiles(directory=dashboard_dist), name="dashboard_assets")
+    app.mount("/static", StaticFiles(directory=dashboard_dist), name="static")
+elif os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+
+@app.get("/dashboard/")
+async def dashboard_index():
+    """Serve React SPA index.html with TRACEA_RCA_BACKEND injected."""
     rca_backend = os.getenv("TRACEA_RCA_BACKEND", "disabled")
-    # Prefer React SPA build, fall back to vanilla JS
     index_path = os.path.join(dashboard_dist, "index.html")
     if not os.path.exists(index_path):
         index_path = os.path.join(static_dir, "index.html")
@@ -95,11 +104,22 @@ async def dashboard_with_config():
     return HTMLResponse(content=html)
 
 
-# Mount static files (React SPA preferred, vanilla JS fallback)
-if os.path.exists(dashboard_dist):
-    app.mount("/static", StaticFiles(directory=dashboard_dist), name="static")
-elif os.path.exists(static_dir):
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+@app.get("/dashboard/{path:path}")
+async def dashboard_spa(path: str):
+    """Serve React SPA routes (HashRouter uses client-side routing)."""
+    rca_backend = os.getenv("TRACEA_RCA_BACKEND", "disabled")
+    index_path = os.path.join(dashboard_dist, "index.html")
+    if not os.path.exists(index_path):
+        index_path = os.path.join(static_dir, "index.html")
+    if not os.path.exists(index_path):
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse("Dashboard not found", status_code=404)
+    with open(index_path) as f:
+        html = f.read()
+    inject = f'<script>window.TRACEA_RCA_BACKEND = "{rca_backend}";</script>'
+    html = html.replace('</head>', f'{inject}</head>')
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html)
 
 from tracea.server.routes.ingest import router as ingest_router
 from tracea.server.routes.sessions import router as sessions_router

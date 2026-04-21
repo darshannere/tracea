@@ -24,6 +24,11 @@ def detect_provider(url: str) -> Provider:
     # Check OpenAI paths
     if normalized in OPENAI_PATHS or "/v1/chat/completions" in normalized:
         return "openai"
+
+    # Handle Azure OpenAI: /openai/deployments/{deployment}/chat/completions
+    if normalized.startswith("/openai/deployments/"):
+        return "openai"
+
     if normalized in ANTHROPIC_PATHS or "/v1/messages" in normalized:
         return "anthropic"
 

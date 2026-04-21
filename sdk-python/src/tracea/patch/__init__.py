@@ -1,7 +1,7 @@
 """tracea SDK HTTP transport patching."""
 from tracea.patch.httpx import patch, unpatch
 
-def patch_client(client):
+def patch_client(client, base_url: str | None = None):
     """Explicitly patch an already-constructed LLM client.
 
     Use this when the client was constructed before tracea.init() was called,
@@ -9,6 +9,11 @@ def patch_client(client):
 
     Args:
         client: An openai.OpenAI or anthropic.Anthropic client instance.
+        base_url: Optional per-client base URL override for provider detection.
+                  For Azure OpenAI and other proxied endpoints where the httpx
+                  client has a custom base_url set, pass that base URL here so
+                  the provider detection can correctly identify the provider from
+                  the request path.
 
     Returns:
         True if patching succeeded, False otherwise.
@@ -18,6 +23,10 @@ def patch_client(client):
         http_client = getattr(client, "_client", None)
         if http_client is None:
             return False
+
+        # Store per-client base URL on the http_client for provider detection
+        if base_url is not None:
+            http_client._tracea_base_url = base_url
 
         # Patch the underlying httpx client's send method directly
         from tracea.patch.httpx import _original_sync_send

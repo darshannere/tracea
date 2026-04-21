@@ -25,8 +25,9 @@ async def bearer_auth(
     if credentials is None:
         raise HTTPException(status_code=401, detail={"error": "unauthorized"})
     expected_key = get_api_key()
+    # Allow any Bearer token when no API key is configured (dev mode)
     if not expected_key:
-        raise HTTPException(status_code=401, detail={"error": "unauthorized"})
+        return "dev-mode"
     if credentials.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail={"error": "unauthorized"})
     if credentials.credentials != expected_key:

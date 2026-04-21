@@ -38,6 +38,45 @@ def test_base_url_stripping():
     assert detect_provider("https://my-azure.openai.azure.com/v1/chat/completions") == "openai"
     assert detect_provider("https://proxy.example.com/openai/v1/chat/completions") == "openai"
 
+def test_azure_openai_path_detection():
+    """PYS-06: Azure OpenAI deployment path is detected as openai provider."""
+    from tracea.patch._utils import detect_provider
+    # Azure OpenAI uses /openai/deployments/{deployment}/chat/completions
+    assert detect_provider("https://my-azure.openai.azure.com/openai/deployments/gpt-4o/chat/completions") == "openai"
+    assert detect_provider("https://my-resource.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-06-01") == "openai"
+
+def test_is_llm_request_with_per_client_base_url():
+    """PYS-06: Per-client base URL is used to strip prefix from request URL."""
+    from tracea.patch.httpx import _is_llm_request
+
+    # Simulate an httpx Request to Azure OpenAI
+    url = "https://my-azure.openai.azure.com/openai/deployments/gpt-4o/chat/completions"
+    request = httpx.Request("POST", url)
+
+    # Without client base_url: returns unknown (path is not recognized as standard openai)
+    assert _is_llm_request(request) is False
+
+    # With client base_url set on a mock client: correctly detects as openai
+    class MockClient:
+        _tracea_base_url = "https://my-azure.openai.azure.com"
+
+    assert _is_llm_request(request, client=MockClient()) is True
+
+def test_patch_client_stores_base_url():
+    """PYS-06: patch_client(base_url=...) stores base URL on the http_client."""
+    from tracea.patch import patch_client
+
+    # Create a mock openai-like client with an httpx client inside
+    mock_http_client = httpx.Client(base_url="https://my-azure.openai.azure.com")
+    mock_client = type("MockOpenAIClient", (), {"_client": mock_http_client})()
+
+    # patch_client with base_url should store it on the http_client
+    result = patch_client(mock_client, base_url="https://my-azure.openai.azure.com")
+
+    assert result is True
+    assert hasattr(mock_http_client, "_tracea_base_url")
+    assert mock_http_client._tracea_base_url == "https://my-azure.openai.azure.com"
+
 def test_patch_idempotent():
     """PYS-02: Calling patch() twice does not double-wrap."""
     # TODO: Call patch() twice, verify send is only wrapped once

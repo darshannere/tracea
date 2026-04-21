@@ -23,9 +23,27 @@ def _get_next_sequence(session_id: str) -> int:
     _sequence_counters[session_id] += 1
     return _sequence_counters[session_id]
 
-def _is_llm_request(request: httpx.Request) -> bool:
-    """Return True if this request is an LLM API call to patch."""
-    provider = detect_provider(str(request.url))
+def _is_llm_request(request: httpx.Request, client: httpx.BaseClient | None = None) -> bool:
+    """Return True if this request is an LLM API call to patch.
+
+    Args:
+        request: The httpx request object.
+        client: Optional httpx client instance. If the client has a
+                 _tracea_base_url attribute (set via patch_client(base_url=...)),
+                 the path is extracted by stripping that base URL from the
+                 full request URL. This is needed for Azure OpenAI and other
+                 proxied endpoints where the httpx client has a custom
+                 base_url that contains the deployment path prefix.
+    """
+    url_str = str(request.url)
+
+    # If client has a stored per-client base URL, use it to extract the effective path
+    if client is not None and hasattr(client, "_tracea_base_url"):
+        base_url = client._tracea_base_url.rstrip("/")
+        if base_url and url_str.startswith(base_url):
+            url_str = url_str[len(base_url):]
+
+    provider = detect_provider(url_str)
     return provider != "unknown"
 
 def _build_event(
@@ -152,7 +170,7 @@ def _patched_sync_send(self, request: httpx.Request, **kwargs) -> httpx.Response
     """Patched httpx.Client.send — sync path."""
     global _original_sync_send
 
-    if not _is_llm_request(request):
+    if not _is_llm_request(request, client=self):
         return _original_sync_send(self, request, **kwargs)
 
     start = time.monotonic()
@@ -179,7 +197,7 @@ async def _patched_async_send(self, request: httpx.Request, **kwargs) -> httpx.R
     """Patched httpx.AsyncClient.send — async path."""
     global _original_async_send
 
-    if not _is_llm_request(request):
+    if not _is_llm_request(request, client=self):
         return await _original_async_send(self, request, **kwargs)
 
     start = time.monotonic()
