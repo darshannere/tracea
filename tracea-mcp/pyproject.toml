@@ -1,0 +1,31 @@
+[project]
+name = "tracea-mcp"
+version = "0.1.0"
+description = "MCP server for tracea agent observability — logs tool calls from Claude Code and OpenClaw"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Darshan Nere", email = "darshan.nere2@gmail.com" }]
+requires-python = ">=3.9"
+dependencies = [
+    "httpx>=0.25.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+tracea-mcp = "tracea_mcp.__main__:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

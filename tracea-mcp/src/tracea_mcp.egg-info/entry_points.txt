@@ -1,0 +1,2 @@
+[console_scripts]
+tracea-mcp = tracea_mcp.__main__:main

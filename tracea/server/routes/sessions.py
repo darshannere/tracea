@@ -31,7 +31,8 @@ async def list_sessions(
     has_more = len(sessions) > limit
     sessions = sessions[:limit] if has_more else sessions
     next_cursor = encode_cursor(sessions[-1]["started_at"], sessions[-1]["session_id"]) if has_more and sessions else None
-    total = (await db.execute("SELECT COUNT(*) FROM sessions")).fetchone()[0]
+    total_result = await db.execute("SELECT COUNT(*) FROM sessions")
+    total = (await total_result.fetchone())[0]
     return {"sessions": [dict(s) for s in sessions], "next_cursor": next_cursor, "total": total}
 
 

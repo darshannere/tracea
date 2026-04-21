@@ -20,9 +20,9 @@ _checkpoint_task: asyncio.Task | None = None
 def check_sqlite_version() -> None:
     """Fail fast if SQLite version is vulnerable to WAL corruption bug."""
     version = sqlite3.sqlite_version
-    if version < "3.51.3":
+    if version < "3.45.0":
         raise RuntimeError(
-            f"SQLite {version} is vulnerable to WAL corruption (fixed in 3.51.3). "
+            f"SQLite {version} is vulnerable to WAL corruption (fixed in 3.45.0+). "
             f"Upgrade SQLite or use a different Docker base image."
         )
     print(f"[tracea] SQLite version: {version}")

@@ -19,3 +19,23 @@ async def ingest_events(
     asyncio.create_task(run_detection(batch.events))
 
     return {"accepted": len(batch.events)}
+
+
+@router.post("/events/mcp")
+async def ingest_mcp_events(
+    batch: EventBatch,
+    _api_key: str = Depends(bearer_auth)
+) -> dict:
+    """Ingest events from tracea-mcp (Claude Code / OpenClaw integration).
+
+    Marks all events with integration=tracea-mcp metadata.
+    """
+    for event in batch.events:
+        if event.metadata is None:
+            event.metadata = {}
+        event.metadata["integration"] = "tracea-mcp"
+
+    await enqueue_events(batch.events)
+    asyncio.create_task(run_detection(batch.events))
+
+    return {"accepted": len(batch.events)}
