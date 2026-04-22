@@ -19,3 +19,4 @@ run_detection.py
 seed_data.py
 tracea-mcp/_t.py
 .gstack/
+.worktrees/
