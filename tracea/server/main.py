@@ -125,11 +125,13 @@ from tracea.server.routes.ingest import router as ingest_router
 from tracea.server.routes.sessions import router as sessions_router
 from tracea.server.routes.issues import router as issues_router
 from tracea.server.routes.config import router as config_router
+from tracea.server.routes.agents import router as agents_router
 
 app.include_router(ingest_router)
 app.include_router(sessions_router)
 app.include_router(issues_router)
 app.include_router(config_router)
+app.include_router(agents_router)
 
 
 def create_app() -> FastAPI:

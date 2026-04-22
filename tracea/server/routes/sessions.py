@@ -16,23 +16,39 @@ def encode_cursor(created_at: str, session_id: str) -> str:
 async def list_sessions(
     limit: int = Query(50, ge=1, le=200),
     cursor: Optional[str] = None,
+    agent_id: Optional[str] = None,
     _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
+
+    where_parts: list[str] = []
+    params: list = []
+
+    if agent_id:
+        where_parts.append("agent_id = ?")
+        params.append(agent_id)
+
     if cursor:
         data = json.loads(base64.b64decode(cursor.encode()))
-        rows = await db.execute(
-            "SELECT * FROM sessions WHERE (started_at, session_id) < (?, ?) ORDER BY started_at DESC LIMIT ?",
-            (data["created_at"], data["session_id"], limit + 1)
-        )
-    else:
-        rows = await db.execute("SELECT * FROM sessions ORDER BY started_at DESC LIMIT ?", (limit + 1,))
+        where_parts.append("(started_at, session_id) < (?, ?)")
+        params.extend([data["created_at"], data["session_id"]])
+
+    where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+
+    rows = await db.execute(
+        f"SELECT * FROM sessions {where} ORDER BY started_at DESC LIMIT ?",
+        params + [limit + 1]
+    )
     sessions = await rows.fetchall()
     has_more = len(sessions) > limit
     sessions = sessions[:limit] if has_more else sessions
     next_cursor = encode_cursor(sessions[-1]["started_at"], sessions[-1]["session_id"]) if has_more and sessions else None
-    total_result = await db.execute("SELECT COUNT(*) FROM sessions")
+
+    count_where = "WHERE agent_id = ?" if agent_id else ""
+    count_params = [agent_id] if agent_id else []
+    total_result = await db.execute(f"SELECT COUNT(*) FROM sessions {count_where}", count_params)
     total = (await total_result.fetchone())[0]
+
     return {"sessions": [dict(s) for s in sessions], "next_cursor": next_cursor, "total": total}
 
 

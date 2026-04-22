@@ -13,6 +13,7 @@ async def list_issues(
     limit: int = Query(50, ge=1, le=200),
     cursor: Optional[str] = None,
     session_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
     _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
@@ -22,18 +23,39 @@ async def list_issues(
     else:
         detected_before, issue_before = None, None
 
-    # Alias issue_type → issue_category to match the frontend model
-    select = "SELECT *, issue_type AS issue_category FROM issues"
+    # JOIN sessions to surface agent_id and platform on each issue
+    select = """
+        SELECT i.*, i.issue_type AS issue_category, s.agent_id, s.platform
+        FROM issues i
+        LEFT JOIN sessions s ON i.session_id = s.session_id
+    """
+
+    where_parts: list[str] = []
+    params: list = []
+
     if session_id:
-        q = f"{select} WHERE session_id = ? AND (detected_at, issue_id) < (?, ?) ORDER BY detected_at DESC LIMIT ?" if cursor else f"{select} WHERE session_id = ? ORDER BY detected_at DESC LIMIT ?"
-        params = (session_id, detected_before, issue_before, limit + 1) if cursor else (session_id, limit + 1)
-    else:
-        q = f"{select} WHERE (detected_at, issue_id) < (?, ?) ORDER BY detected_at DESC LIMIT ?" if cursor else f"{select} ORDER BY detected_at DESC LIMIT ?"
-        params = (detected_before, issue_before, limit + 1) if cursor else (limit + 1,)
+        where_parts.append("i.session_id = ?")
+        params.append(session_id)
+    if agent_id:
+        where_parts.append("s.agent_id = ?")
+        params.append(agent_id)
+    if cursor:
+        where_parts.append("(i.detected_at, i.issue_id) < (?, ?)")
+        params.extend([detected_before, issue_before])
+
+    where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    q = f"{select} {where} ORDER BY i.detected_at DESC LIMIT ?"
+    params.append(limit + 1)
 
     rows = await db.execute(q, params)
     issues = await rows.fetchall()
     has_more = len(issues) > limit
     issues = issues[:limit] if has_more else issues
-    next_cursor = base64.b64encode(json.dumps({"detected_at": issues[-1]["detected_at"], "issue_id": issues[-1]["issue_id"]}).encode()).decode() if has_more and issues else None
+    next_cursor = (
+        base64.b64encode(
+            json.dumps({"detected_at": issues[-1]["detected_at"], "issue_id": issues[-1]["issue_id"]}).encode()
+        ).decode()
+        if has_more and issues
+        else None
+    )
     return {"issues": [dict(i) for i in issues], "next_cursor": next_cursor}

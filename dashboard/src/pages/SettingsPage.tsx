@@ -69,6 +69,7 @@ export function SettingsPage() {
       const msg = e instanceof Error ? e.message : String(e)
       setAlertsState((s) => ({
         ...s,
+        loaded: true,
         loading: false,
         error: `Failed to load: ${msg}`,
       }))
@@ -90,6 +91,7 @@ export function SettingsPage() {
       const msg = e instanceof Error ? e.message : String(e)
       setRulesState((s) => ({
         ...s,
+        loaded: true,
         loading: false,
         error: `Failed to load: ${msg}`,
       }))

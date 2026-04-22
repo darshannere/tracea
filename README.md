@@ -9,7 +9,7 @@ Self-hosted AI agent observability platform. Trace LLM sessions, detect issues, 
 - **Issue Detection** — YAML-configurable detection rules for tool errors, high cost, high latency, rate limits, repeated calls, infinite loops, and more
 - **AI-Powered RCA** — Root cause analysis powered by LLMs (OpenAI, Anthropic, or local Ollama)
 - **Alert Routing** — Route issues to Slack or generic webhooks with per-destination rate limiting
-- **SDK + MCP** — Python SDK for manual tracing and MCP server for Claude Code / OpenClaw integration
+- **SDK + MCP** — Python SDK with auto-instrumentation, MCP server for agent integration, and native hook plugins for Claude Code / Gemini CLI / OpenCode
 
 ## Project Structure
 
@@ -67,11 +67,134 @@ cd sdk-python
 pip install -e "."
 ```
 
+See [sdk-python/README.md](sdk-python/README.md) for usage examples.
+
 ### 4. MCP Server (optional)
 
 ```bash
 cd tracea-mcp
 pip install -e "."
+```
+
+Or install from PyPI:
+
+```bash
+pip install tracea-mcp
+# or
+uvx tracea-mcp --api-key YOUR_KEY --server-url http://localhost:8080
+```
+
+### 5. Agent Plugins (optional)
+
+For agents that support native lifecycle hooks (Claude Code, Gemini CLI, OpenCode), copy the relevant plugin from `tracea-plugins/`:
+
+```bash
+# Claude Code — copy hook script
+chmod +x tracea-plugins/claude-code/tracea-hook.sh
+cp tracea-plugins/claude-code/tracea-hook.sh ~/.local/bin/
+
+# Then add to ~/.claude/settings.json:
+# {
+#   "hooks": {
+#     "PreToolUse": "tracea-hook.sh pre",
+#     "PostToolUse": "tracea-hook.sh post",
+#     "Stop": "tracea-hook.sh stop"
+#   }
+# }
+
+# Gemini CLI — copy hook script
+chmod +x tracea-plugins/gemini/tracea-hook.py
+cp tracea-plugins/gemini/tracea-hook.py ~/.local/bin/
+
+# Then add to ~/.gemini/settings.json:
+# {
+#   "hooks": {
+#     "BeforeTool": ["python3", "tracea-hook.py", "before_tool"],
+#     "AfterTool": ["python3", "tracea-hook.py", "after_tool"],
+#     "SessionStart": ["python3", "tracea-hook.py", "session_start"],
+#     "SessionEnd": ["python3", "tracea-hook.py", "session_end"]
+#   }
+# }
+
+# OpenCode — copy plugin
+cp tracea-plugins/opencode/tracea-plugin.ts ~/.opencode/plugins/
+# Auto-discovered on startup
+```
+
+See individual plugin READMEs for full details:
+- [Claude Code plugin](tracea-plugins/claude-code/README.md)
+- [Gemini CLI plugin](tracea-plugins/gemini/README.md)
+- [OpenCode plugin](tracea-plugins/opencode/README.md)
+
+## Agent Integration Matrix
+
+| Agent | Integration | Auto-captures tool calls | Installation |
+|-------|-------------|--------------------------|--------------|
+| **Claude Code** | Native hooks (`PreToolUse`/`PostToolUse`) | ✅ All tools | Copy `tracea-hook.sh` + add to `settings.json` |
+| **Gemini CLI** | Native hooks (`BeforeTool`/`AfterTool`) | ✅ All tools | Copy `tracea-hook.py` + add to `settings.json` |
+| **OpenCode** | Plugin system (`tool.execute.before`) | ✅ All tools | Copy `tracea-plugin.ts` to `~/.opencode/plugins/` |
+| **Kimi CLI** | Native hooks (`PreToolUse`/`PostToolUse`/`SessionStart`/`SessionEnd`) | ✅ All tools | Add hooks to `~/.kimi/config.toml` |
+| **Cursor** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Cursor MCP settings |
+| **Cline** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Cline MCP settings |
+| **Zed** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Zed MCP settings |
+| **Python scripts** | SDK auto-instrumentation | ✅ All httpx LLM calls + manual logs | `pip install tracea` + `tracea.init()` |
+
+**Native hooks** intercept every tool call automatically. **MCP** adds tracea as a tool the agent can call — the agent decides when to use it.
+
+## MCP Configuration
+
+### Kimi CLI
+
+Kimi supports **native hooks** (recommended) or MCP.
+
+**Native hooks** — add to `~/.kimi/config.toml`:
+```toml
+[[hooks]]
+event = "PreToolUse"
+command = "python3 ~/.kimi/hooks/tracea-hook.py pre"
+
+[[hooks]]
+event = "PostToolUse"
+command = "python3 ~/.kimi/hooks/tracea-hook.py post"
+
+[[hooks]]
+event = "PostToolUseFailure"
+command = "python3 ~/.kimi/hooks/tracea-hook.py post_failure"
+
+[[hooks]]
+event = "SessionStart"
+command = "python3 ~/.kimi/hooks/tracea-hook.py session_start"
+
+[[hooks]]
+event = "SessionEnd"
+command = "python3 ~/.kimi/hooks/tracea-hook.py session_end"
+```
+
+See [tracea-plugins/kimi/README.md](tracea-plugins/kimi/README.md) for the hook script.
+
+**MCP** (alternative, not recommended):
+```json
+{
+  "mcpServers": {
+    "tracea": {
+      "command": "uvx",
+      "args": [
+        "tracea-mcp",
+        "--api-key", "YOUR_API_KEY",
+        "--server-url", "http://localhost:8080",
+        "--agent-id", "kimi"
+      ]
+    }
+  }
+}
+```
+
+### Cursor / Cline / Zed
+
+These agents have no native hooks — use MCP:
+
+```bash
+uvx tracea-mcp --api-key YOUR_API_KEY --server-url http://localhost:8080 --agent-id cursor
 ```
 
 ## Configuration

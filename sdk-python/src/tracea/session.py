@@ -37,6 +37,7 @@ async def session(
     tags: list[str] | None = None,
     agent_id: str | None = None,
     session_id: str | None = None,
+    emit_events: bool = True,
 ):
     """Async context manager for session-scoped tracea instrumentation.
 
@@ -46,6 +47,14 @@ async def session(
             response = client.chat.completions.create(...)
 
     If session_id is not provided, it is derived from hostname + process ID.
+
+    Args:
+        metadata: Session-level metadata applied to all events.
+        tags: Session-level tags applied to all events.
+        agent_id: Agent identifier (e.g. "my-bot-v2").
+        session_id: Explicit session ID. If omitted, derived deterministically.
+        emit_events: If True (default), emits ``session_start`` on enter and
+                     ``session_end`` on exit.
     """
     resolved_session_id = session_id or derive_session_id()
 
@@ -61,7 +70,30 @@ async def session(
     }
 
     token = _session_ctx.set(ctx)
+
+    # Emit session_start before yielding
+    if emit_events:
+        try:
+            from tracea.log import log_event
+            log_event(
+                event_type="session_start",
+                metadata={"tags": tags or [], **merged_metadata},
+            )
+        except Exception:
+            pass  # Never fail session setup
+
     try:
         yield ctx
     finally:
+        # Emit session_end before resetting context
+        if emit_events:
+            try:
+                from tracea.log import log_event
+                log_event(
+                    event_type="session_end",
+                    metadata={"tags": tags or [], **merged_metadata},
+                )
+            except Exception:
+                pass  # Never fail session teardown
+
         _session_ctx.reset(token)

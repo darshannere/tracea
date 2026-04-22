@@ -1,10 +1,5 @@
 """Entry point: uvx tracea-mcp"""
-from tracea_mcp.server import MCPServer
-
-
-def main():
-    server = MCPServer()
-    server.run()
+from tracea_mcp.server import main
 
 
 if __name__ == "__main__":

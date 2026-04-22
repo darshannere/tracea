@@ -14,6 +14,7 @@ import {
   HealthLegend,
   CostPerSessionChart,
 } from '@/components/charts/InsightsCharts'
+import { AgentBar, AgentStat, agentColor, formatPlatform } from '@/components/agents/AgentBar'
 import { Clock, Zap, AlertCircle, ArrowUpDown, BarChart3 } from 'lucide-react'
 import {
   Table,
@@ -33,9 +34,12 @@ import {
   SortingState,
   useReactTable,
 } from '@tanstack/react-table'
+import { cn } from '@/lib/utils'
 
 interface Session {
   session_id: string
+  agent_id: string | null
+  platform: string | null
   started_at: string
   ended_at: string | null
   duration_ms: number | null
@@ -77,17 +81,54 @@ export function SessionsPage() {
   const { hasKey } = useAuth()
   const navigate = useNavigate()
   const [sorting, setSorting] = useState<SortingState>([])
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const { data, error } = usePolling(async () => {
     const res = await api.get<{ sessions: Session[]; total: number }>('/api/v1/sessions')
     return res.data
   })
 
-  const sessions: Session[] = data?.sessions ?? []
-  const total = data?.total ?? 0
+  const { data: agentsData } = usePolling(async () => {
+    const res = await api.get<{ agents: AgentStat[] }>('/api/v1/agents')
+    return res.data
+  })
+
+  const allSessions: Session[] = data?.sessions ?? []
+  const agents: AgentStat[] = agentsData?.agents ?? []
+  const agentIds = agents.map((a) => a.agent_id)
+
+  const sessions = useMemo(
+    () => selectedAgent ? allSessions.filter((s) => s.agent_id === selectedAgent) : allSessions,
+    [allSessions, selectedAgent]
+  )
+  const total = selectedAgent ? sessions.length : (data?.total ?? 0)
 
   const columns: ColumnDef<Session>[] = useMemo(
     () => [
+      {
+        accessorKey: 'agent_id',
+        header: 'Agent',
+        cell: ({ row }) => {
+          const aid = row.original.agent_id
+          if (!aid) return <span className="text-zinc-400 text-xs">—</span>
+          const color = agentColor(aid, agentIds)
+          return (
+            <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-medium', color.bg, color.text)}>
+              <span className={cn('h-1.5 w-1.5 rounded-full', color.dot)} />
+              {aid.length > 16 ? `${aid.slice(0, 14)}…` : aid}
+            </span>
+          )
+        },
+      },
+      {
+        accessorKey: 'platform',
+        header: 'Platform',
+        cell: ({ row }) => {
+          const label = formatPlatform(row.original.platform)
+          if (!label) return <span className="text-zinc-400 text-xs">—</span>
+          return <span className="text-xs text-zinc-600 bg-zinc-100 px-1.5 py-0.5 rounded">{label}</span>
+        },
+      },
       {
         accessorKey: 'session_id',
         header: 'Session ID',
@@ -176,7 +217,7 @@ export function SessionsPage() {
         },
       },
     ],
-    []
+    [agentIds]
   )
 
   const table = useReactTable({
@@ -254,7 +295,7 @@ export function SessionsPage() {
     )
   }
 
-  if (sessions.length === 0) {
+  if (allSessions.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
         <Clock className="h-8 w-8 mb-2" />
@@ -271,9 +312,16 @@ export function SessionsPage() {
         <div className="flex items-center gap-3">
           <Zap className="h-5 w-5 text-accent" />
           <h2 className="text-xl font-semibold">Sessions</h2>
-          <span className="text-sm text-zinc-500">{total} total</span>
+          <span className="text-sm text-zinc-500">
+            {selectedAgent ? `${sessions.length} of ${data?.total ?? 0}` : `${total} total`}
+          </span>
         </div>
       </div>
+
+      {/* Agent Bar */}
+      {agents.length > 0 && (
+        <AgentBar agents={agents} selectedAgent={selectedAgent} onSelect={setSelectedAgent} />
+      )}
 
       {/* Stat Cards */}
       <StatCards sessions={sessions} total={total} />
@@ -284,10 +332,12 @@ export function SessionsPage() {
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-zinc-500" />
             <h3 className="text-sm font-semibold text-zinc-700">Insights</h3>
+            {selectedAgent && (
+              <span className="text-xs text-zinc-400">filtered to {selectedAgent}</span>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {/* Cost per Day */}
             {aggregatedMetrics.costSeries.length > 0 && (
               <div className="border border-zinc-200 rounded-lg p-4 bg-white">
                 <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
@@ -297,7 +347,6 @@ export function SessionsPage() {
               </div>
             )}
 
-            {/* Tokens per Day */}
             {aggregatedMetrics.tokenSeries.length > 0 && (
               <div className="border border-zinc-200 rounded-lg p-4 bg-white">
                 <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
@@ -307,7 +356,6 @@ export function SessionsPage() {
               </div>
             )}
 
-            {/* Events per Day */}
             {aggregatedMetrics.eventsSeries.length > 0 && (
               <div className="border border-zinc-200 rounded-lg p-4 bg-white">
                 <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
@@ -317,7 +365,6 @@ export function SessionsPage() {
               </div>
             )}
 
-            {/* Duration Distribution */}
             <div className="border border-zinc-200 rounded-lg p-4 bg-white">
               <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
                 Duration Distribution
@@ -325,7 +372,6 @@ export function SessionsPage() {
               <DurationDistributionChart sessions={sessions} />
             </div>
 
-            {/* Session Health */}
             <div className="border border-zinc-200 rounded-lg p-4 bg-white">
               <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
                 Session Health
@@ -334,7 +380,6 @@ export function SessionsPage() {
               <HealthLegend sessions={sessions} />
             </div>
 
-            {/* Cost per Session */}
             <div className="border border-zinc-200 rounded-lg p-4 bg-white">
               <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
                 Cost per Session

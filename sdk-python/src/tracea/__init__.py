@@ -10,6 +10,16 @@ For explicit session management:
 
 For patching already-constructed clients:
     tracea.patch_client(openai_client)
+
+For direct event logging (fire-and-forget):
+    tracea.log_tool_call("search", {"query": "python"})
+    tracea.log_tool_result("search", result={"hits": [...]}, duration_ms=120)
+    tracea.log_chat(role="assistant", content="Hello", model="gpt-4o")
+    tracea.log_error("Something went wrong")
+
+For auto-timed tool calls:
+    with tracea.LogTool("search", arguments={"query": "python"}) as lt:
+        lt.result = do_search("python")
 """
 from tracea.config import init, get_config
 from tracea.session import session, derive_session_id, get_session_ctx
@@ -17,6 +27,14 @@ from tracea.patch import patch, unpatch, patch_client
 from tracea.buffer import get_buffer
 from tracea.events import TracedEvent, EventBatch, TokenUsage
 from tracea.api import TraceaAPIClient
+from tracea.log import (
+    log_tool_call,
+    log_tool_result,
+    log_chat,
+    log_error,
+    log_event,
+    LogTool,
+)
 
 __all__ = [
     # Configuration
@@ -38,6 +56,13 @@ __all__ = [
     "TokenUsage",
     # API client
     "TraceaAPIClient",
+    # Direct logging (fire-and-forget)
+    "log_tool_call",
+    "log_tool_result",
+    "log_chat",
+    "log_error",
+    "log_event",
+    "LogTool",
 ]
 
 def init(

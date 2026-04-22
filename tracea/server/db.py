@@ -230,11 +230,18 @@ async def flush_events() -> int:
             await _db.execute(
                 """
                 INSERT INTO sessions
-                    (session_id, agent_id, started_at, ended_at, last_event_at,
+                    (session_id, agent_id, platform, started_at, ended_at, last_event_at,
                      duration_ms, event_count, total_cost, total_tokens)
                 SELECT
                     session_id,
                     MAX(agent_id),
+                    COALESCE(
+                        MAX(CASE WHEN json_extract(metadata, '$.integration') IS NOT NULL
+                                 THEN json_extract(metadata, '$.integration') END),
+                        MAX(CASE WHEN json_extract(metadata, '$.source') = 'claude-code'
+                                 THEN 'tracea-mcp' END),
+                        ''
+                    ),
                     MIN(timestamp),
                     MAX(CASE WHEN type = 'session_end' THEN timestamp END),
                     MAX(timestamp),
@@ -250,6 +257,7 @@ async def flush_events() -> int:
                 GROUP BY session_id
                 ON CONFLICT(session_id) DO UPDATE SET
                     agent_id      = excluded.agent_id,
+                    platform      = excluded.platform,
                     ended_at      = excluded.ended_at,
                     last_event_at = excluded.last_event_at,
                     duration_ms   = excluded.duration_ms,

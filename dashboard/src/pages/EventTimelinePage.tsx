@@ -199,7 +199,7 @@ export function EventTimelinePage() {
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content
-              className="bg-white border border-zinc-200 rounded-lg shadow-lg p-3 min-w-48 z-50"
+              className="relative bg-white border border-zinc-200 rounded-lg shadow-lg p-3 min-w-48 z-50"
               sideOffset={4}
             >
               <div className="space-y-2">
@@ -263,7 +263,7 @@ export function EventTimelinePage() {
                     <td className="px-4 py-3 text-zinc-600 text-xs">
                       {event.event_type === 'chat.completion' && (
                         <span>
-                          {keyFields.model} · {keyFields.tokens?.toLocaleString()} tokens · ${(Number(keyFields.cost) ?? 0).toFixed(4)}
+                          {keyFields.model} · {keyFields.tokens?.toLocaleString()} tokens · ${Number(keyFields.cost ?? 0).toFixed(4)}
                         </span>
                       )}
                       {event.event_type === 'tool_call' && (

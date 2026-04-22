@@ -1,9 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 from datetime import datetime
-from uuid import UUID
-
-
 class TokenUsage(BaseModel):
     input: int = 0
     output: int = 0
@@ -14,13 +11,17 @@ EventType = Literal["session_start", "chat.completion", "tool_call", "tool_resul
 
 
 class TracedEvent(BaseModel):
-    event_id: UUID
-    session_id: UUID
+    event_id: str
+    session_id: str
     agent_id: str
     sequence: int = 0
     timestamp: datetime
     type: EventType
-    provider: Literal["openai", "anthropic", "azure_openai", "ollama", "unknown"] = "unknown"
+    provider: Literal[
+        "openai", "anthropic", "azure_openai", "ollama",
+        "claude-code", "gemini-cli", "opencode", "tracea-mcp", "kimi",
+        "unknown",
+    ] = "unknown"
     model: str = ""
     role: Optional[Literal["user", "assistant", "system"]] = None
     content: Optional[str] = None
@@ -38,4 +39,4 @@ class TracedEvent(BaseModel):
 
 class EventBatch(BaseModel):
     events: list[TracedEvent]
-    batch_id: Optional[UUID] = None
+    batch_id: Optional[str] = None
