@@ -1,10 +1,16 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
 from datetime import datetime
 class TokenUsage(BaseModel):
     input: int = 0
     output: int = 0
     total: int = 0
+
+    @model_validator(mode="after")
+    def check_token_consistency(self):
+        if self.input + self.output > self.total + 2:  # Allow small rounding tolerance
+            raise ValueError(f"input ({self.input}) + output ({self.output}) must not exceed total ({self.total})")
+        return self
 
 
 EventType = Literal["session_start", "chat.completion", "tool_call", "tool_result", "error", "session_end"]

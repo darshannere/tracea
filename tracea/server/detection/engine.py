@@ -271,7 +271,7 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
         print(f"[tracea] Issue created: {rule.get('id', 'unknown')} ({rule.get('issue_category', '')}) for event {event_id}")
 
         # Fire alert (does NOT wait for RCA — fire-and-forget)
-        asyncio.create_task(_enqueue_alert(issue_id, session_id, rule.get('issue_category', ''), severity))
+        asyncio.create_task(_enqueue_alert(issue_id, session_id, rule.get('issue_category', ''), rule.get('severity', 'medium')))
     except Exception as e:
         print(f"[tracea] Failed to create issue: {e}")
 

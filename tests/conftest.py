@@ -8,8 +8,8 @@ from uuid import uuid4
 @pytest.fixture
 def sample_event():
     return TracedEvent(
-        event_id=uuid4(),
-        session_id=uuid4(),
+        event_id=str(uuid4()),
+        session_id=str(uuid4()),
         agent_id="test-agent",
         sequence=1,
         timestamp=datetime.utcnow(),
@@ -25,8 +25,8 @@ def sample_event():
 @pytest.fixture
 def sample_error_event():
     return TracedEvent(
-        event_id=uuid4(),
-        session_id=uuid4(),
+        event_id=str(uuid4()),
+        session_id=str(uuid4()),
         agent_id="test-agent",
         sequence=2,
         timestamp=datetime.utcnow(),

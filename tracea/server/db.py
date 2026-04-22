@@ -20,7 +20,8 @@ _checkpoint_task: asyncio.Task | None = None
 def check_sqlite_version() -> None:
     """Fail fast if SQLite version is vulnerable to WAL corruption bug."""
     version = sqlite3.sqlite_version
-    if version < "3.45.0":
+    version_tuple = tuple(map(int, version.split(".")))
+    if version_tuple < (3, 45, 0):
         raise RuntimeError(
             f"SQLite {version} is vulnerable to WAL corruption (fixed in 3.45.0+). "
             f"Upgrade SQLite or use a different Docker base image."
@@ -203,77 +204,79 @@ async def flush_events() -> int:
         batch = list(_write_buffer)
         _write_buffer.clear()
 
-    if not batch:
-        return 0
+        if not batch:
+            return 0
 
-    if _db is None:
-        raise RuntimeError("Database not initialized")
+        if _db is None:
+            # Put events back in buffer if DB not ready
+            _write_buffer = batch + _write_buffer
+            raise RuntimeError("Database not initialized")
 
-    # Use BEGIN IMMEDIATE to avoid lock escalation
-    await _db.execute("BEGIN IMMEDIATE")
-    try:
-        await _db.executemany(
-            """INSERT OR REPLACE INTO events
-            (event_id, session_id, agent_id, sequence, timestamp, schema_version,
-             type, provider, model, role, content, tool_call_id, tool_name,
-             status_code, error, duration_ms, input_tokens, output_tokens,
-             total_tokens, cost_usd, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            batch
-        )
-
-        # Upsert sessions derived from the events we just wrote.
-        # We re-aggregate from the full events table so partial batches
-        # don't produce stale totals.
-        session_ids = list({row[1] for row in batch})  # row[1] = session_id
-        for sid in session_ids:
-            await _db.execute(
-                """
-                INSERT INTO sessions
-                    (session_id, agent_id, platform, started_at, ended_at, last_event_at,
-                     duration_ms, event_count, total_cost, total_tokens)
-                SELECT
-                    session_id,
-                    MAX(agent_id),
-                    COALESCE(
-                        MAX(CASE WHEN json_extract(metadata, '$.integration') IS NOT NULL
-                                 THEN json_extract(metadata, '$.integration') END),
-                        MAX(CASE WHEN json_extract(metadata, '$.source') = 'claude-code'
-                                 THEN 'tracea-mcp' END),
-                        ''
-                    ),
-                    MIN(timestamp),
-                    MAX(CASE WHEN type = 'session_end' THEN timestamp END),
-                    MAX(timestamp),
-                    CAST(
-                        (julianday(MAX(timestamp)) - julianday(MIN(timestamp)))
-                        * 86400000 AS INTEGER
-                    ),
-                    COUNT(*),
-                    ROUND(SUM(COALESCE(cost_usd, 0.0)), 6),
-                    SUM(COALESCE(total_tokens, 0))
-                FROM events
-                WHERE session_id = ?
-                GROUP BY session_id
-                ON CONFLICT(session_id) DO UPDATE SET
-                    agent_id      = excluded.agent_id,
-                    platform      = excluded.platform,
-                    ended_at      = excluded.ended_at,
-                    last_event_at = excluded.last_event_at,
-                    duration_ms   = excluded.duration_ms,
-                    event_count   = excluded.event_count,
-                    total_cost    = excluded.total_cost,
-                    total_tokens  = excluded.total_tokens
-                """,
-                (sid,)
+        # Use BEGIN IMMEDIATE to avoid lock escalation
+        await _db.execute("BEGIN IMMEDIATE")
+        try:
+            await _db.executemany(
+                """INSERT OR REPLACE INTO events
+                (event_id, session_id, agent_id, sequence, timestamp, schema_version,
+                 type, provider, model, role, content, tool_call_id, tool_name,
+                 status_code, error, duration_ms, input_tokens, output_tokens,
+                 total_tokens, cost_usd, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                batch
             )
 
-        await _db.commit()
-    except Exception:
-        await _db.rollback()
-        # Put events back in buffer on failure
-        _write_buffer = batch + _write_buffer
-        raise
+            # Upsert sessions derived from the events we just wrote.
+            # We re-aggregate from the full events table so partial batches
+            # don't produce stale totals.
+            session_ids = list({row[1] for row in batch})  # row[1] = session_id
+            for sid in session_ids:
+                await _db.execute(
+                    """
+                    INSERT INTO sessions
+                        (session_id, agent_id, platform, started_at, ended_at, last_event_at,
+                         duration_ms, event_count, total_cost, total_tokens)
+                    SELECT
+                        session_id,
+                        MAX(agent_id),
+                        COALESCE(
+                            MAX(CASE WHEN json_extract(metadata, '$.integration') IS NOT NULL
+                                     THEN json_extract(metadata, '$.integration') END),
+                            MAX(CASE WHEN json_extract(metadata, '$.source') = 'claude-code'
+                                     THEN 'tracea-mcp' END),
+                            ''
+                        ),
+                        MIN(timestamp),
+                        MAX(CASE WHEN type = 'session_end' THEN timestamp END),
+                        MAX(timestamp),
+                        CAST(
+                            (julianday(MAX(timestamp)) - julianday(MIN(timestamp)))
+                            * 86400000 AS INTEGER
+                        ),
+                        COUNT(*),
+                        ROUND(SUM(COALESCE(cost_usd, 0.0)), 6),
+                        SUM(COALESCE(total_tokens, 0))
+                    FROM events
+                    WHERE session_id = ?
+                    GROUP BY session_id
+                    ON CONFLICT(session_id) DO UPDATE SET
+                        agent_id      = excluded.agent_id,
+                        platform      = excluded.platform,
+                        ended_at      = excluded.ended_at,
+                        last_event_at = excluded.last_event_at,
+                        duration_ms   = excluded.duration_ms,
+                        event_count   = excluded.event_count,
+                        total_cost    = excluded.total_cost,
+                        total_tokens  = excluded.total_tokens
+                    """,
+                    (sid,)
+                )
+
+            await _db.commit()
+        except Exception:
+            await _db.rollback()
+            # Put events back in buffer on failure
+            _write_buffer = batch + _write_buffer
+            raise
 
     return len(batch)
 

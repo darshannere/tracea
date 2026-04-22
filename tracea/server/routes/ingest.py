@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from tracea.server.models import EventBatch
 from tracea.server.auth import bearer_auth
 from tracea.server.db import enqueue_events
@@ -7,12 +7,19 @@ from tracea.server.detection.engine import run_detection
 
 router = APIRouter(prefix="/api/v1", tags=["ingest"])
 
+_MAX_BATCH_SIZE = 1000
+
 
 @router.post("/events")
 async def ingest_events(
     batch: EventBatch,
     _api_key: str = Depends(bearer_auth)
 ) -> dict:
+    if len(batch.events) > _MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail={"error": "batch_too_large", "max": _MAX_BATCH_SIZE, "received": len(batch.events)}
+        )
     await enqueue_events(batch.events)
 
     # Fire detection AFTER enqueue (SQLite commit is async via buffer flush)
@@ -30,6 +37,11 @@ async def ingest_mcp_events(
 
     Marks all events with integration=tracea-mcp metadata.
     """
+    if len(batch.events) > _MAX_BATCH_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail={"error": "batch_too_large", "max": _MAX_BATCH_SIZE, "received": len(batch.events)}
+        )
     for event in batch.events:
         if event.metadata is None:
             event.metadata = {}

@@ -1,6 +1,6 @@
 import base64
 import json
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from tracea.server.auth import bearer_auth
 from tracea.server.db import get_db
 from typing import Optional
@@ -10,6 +10,13 @@ router = APIRouter(prefix="/api/v1", tags=["sessions"])
 
 def encode_cursor(created_at: str, session_id: str) -> str:
     return base64.b64encode(json.dumps({"created_at": created_at, "session_id": session_id}).encode()).decode()
+
+
+def _decode_cursor(cursor: str) -> dict:
+    try:
+        return json.loads(base64.b64decode(cursor.encode()))
+    except Exception:
+        raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
 
 
 @router.get("/sessions")
@@ -29,7 +36,7 @@ async def list_sessions(
         params.append(agent_id)
 
     if cursor:
-        data = json.loads(base64.b64decode(cursor.encode()))
+        data = _decode_cursor(cursor)
         where_parts.append("(started_at, session_id) < (?, ?)")
         params.extend([data["created_at"], data["session_id"]])
 

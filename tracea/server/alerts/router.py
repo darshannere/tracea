@@ -17,9 +17,9 @@ _bucket_lock = asyncio.Lock()
 _RATE_LIMIT_RPM = 60  # 1 msg/sec default
 
 
-def _resolve_route(issue_category: str) -> Optional[AlertRoute]:
+async def _resolve_route(issue_category: str) -> Optional[AlertRoute]:
     """Find the most specific matching route for an issue category."""
-    config = get_alerts_config()
+    config = await get_alerts_config()
     if not config:
         return None
 
@@ -76,7 +76,7 @@ async def _check_rate_limit_async(bucket_key: str, now: float, refill_rate: floa
 
 async def get_route_for_issue(session_id: str, issue_category: str) -> Optional[AlertRoute]:
     """Resolve route + check dedup + check rate limit. Returns route if should fire."""
-    route = _resolve_route(issue_category)
+    route = await _resolve_route(issue_category)
     if not route:
         return None
 

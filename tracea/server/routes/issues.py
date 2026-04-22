@@ -1,11 +1,18 @@
 import base64
 import json
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from tracea.server.auth import bearer_auth
 from tracea.server.db import get_db
 from typing import Optional
 
 router = APIRouter(prefix="/api/v1", tags=["issues"])
+
+
+def _decode_cursor(cursor: str) -> dict:
+    try:
+        return json.loads(base64.b64decode(cursor.encode()))
+    except Exception:
+        raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
 
 
 @router.get("/issues")
@@ -18,7 +25,7 @@ async def list_issues(
 ):
     db = await anext(get_db())
     if cursor:
-        data = json.loads(base64.b64decode(cursor.encode()))
+        data = _decode_cursor(cursor)
         detected_before, issue_before = data["detected_at"], data["issue_id"]
     else:
         detected_before, issue_before = None, None
