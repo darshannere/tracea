@@ -20,3 +20,20 @@ seed_data.py
 tracea-mcp/_t.py
 .gstack/
 .worktrees/
+
+# Internal / dev artifacts
+.planning/
+.playwright-mcp/
+bugs.md
+BUGFIX_PLAN.md
+CLAUDE.md
+codebase-to-course.skill
+darshannere-main-design-*.md
+import_claude_logs.py
+import_kimi_logs.py
+*.bak
+
+# Editor / agent configs
+.claude/
+.vscode/
+.idea/

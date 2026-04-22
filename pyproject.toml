@@ -2,7 +2,22 @@
 name = "tracea-server"
 version = "0.1.0"
 description = "Self-hosted AI agent observability server"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "Darshan Nere", email = "darshan.nere2@gmail.com" }]
 requires-python = ">=3.11"
+keywords = ["observability", "llm", "agents", "tracing", "monitoring"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: System :: Monitoring",
+]
 dependencies = [
     "fastapi[standard]>=0.115,<1.0",
     "aiosqlite>=0.20,<1.0",

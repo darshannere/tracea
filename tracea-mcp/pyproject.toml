@@ -6,6 +6,18 @@ readme = "README.md"
 license = { text = "MIT" }
 authors = [{ name = "Darshan Nere", email = "darshan.nere2@gmail.com" }]
 requires-python = ">=3.9"
+keywords = ["mcp", "llm", "agents", "observability", "claude"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
 dependencies = [
     "httpx>=0.25.0",
 ]
