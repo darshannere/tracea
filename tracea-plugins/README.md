@@ -12,6 +12,7 @@ that support interception but not MCP.
 | Claude Code  | `.claude/settings.json` hooks | ✅     | `claude-code/`    |
 | Gemini CLI   | `settings.json` hooks       | ✅     | `gemini/`         |
 | OpenCode     | `.opencode/plugins/*.ts`    | ✅     | `opencode/`       |
+| OpenClaw     | Plugin hooks (`api.on()`)   | ✅     | `openclaw/`       |
 | Cursor       | No hooks, only additive MCP | ❌     | Use tracea-mcp    |
 | Cline        | No hooks, only additive MCP | ❌     | Use tracea-mcp    |
 | Zed          | No hooks, only additive MCP | ❌     | Use tracea-mcp    |
@@ -45,7 +46,7 @@ Each plugin directory contains:
 
 ## Events emitted
 
-All plugins emit the same event types:
+All plugins emit the same core event types:
 
 | Event type      | When emitted                        |
 |-----------------|-------------------------------------|
@@ -53,6 +54,15 @@ All plugins emit the same event types:
 | `tool_call`     | Before a tool is invoked            |
 | `tool_result`   | After a tool completes (or errors)  |
 | `session_end`   | When the agent session ends         |
+
+The OpenClaw plugin additionally emits persistent-agent events:
+
+| Event type           | When emitted                        |
+|----------------------|-------------------------------------|
+| `agent_turn`         | Complete agent reasoning cycle      |
+| `heartbeat`          | Periodic health check               |
+| `memory_compaction`  | Context window compaction           |
+| `gateway_event`      | Gateway start/stop                  |
 
 ## MCP vs. Native hooks
 

@@ -1,4 +1,6 @@
 rules:
+  # ── Universal rules (all integrations) ──────────────────────────
+
   - id: tool_error
     description: "LLM API call returned an error"
     condition:
@@ -97,3 +99,48 @@ rules:
       min_count: 10
     issue_category: infinite_loop
     severity: critical
+
+  # ── OpenClaw / persistent-agent rules ───────────────────────────
+
+  - id: heartbeat_failure
+    description: "OpenClaw heartbeat failed — agent may be stuck or unreachable"
+    condition:
+      and:
+        - field: type
+          op: equals
+          value: "heartbeat"
+        - field: error
+          op: exists
+    issue_category: heartbeat_failure
+    severity: high
+
+  - id: agent_turn_timeout
+    description: "OpenClaw agent turn exceeded 60 seconds (possible model stall)"
+    condition:
+      and:
+        - field: type
+          op: equals
+          value: "agent_turn"
+        - field: duration_ms
+          op: gt
+          value: 60000
+    issue_category: agent_turn_timeout
+    severity: medium
+
+  - id: memory_compaction_stress
+    description: "Memory compaction occurred — context window under pressure"
+    condition:
+      field: type
+      op: equals
+      value: "memory_compaction"
+    issue_category: memory_compaction_stress
+    severity: low
+
+  - id: gateway_restart
+    description: "OpenClaw gateway was restarted"
+    condition:
+      field: type
+      op: equals
+      value: "gateway_event"
+    issue_category: gateway_restart
+    severity: medium

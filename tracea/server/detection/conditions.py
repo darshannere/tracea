@@ -24,16 +24,18 @@ def evaluate_condition(condition: dict, event: dict) -> bool:
     - Composite AND: {and: [conditions]}
     - Composite OR: {or: [conditions]}
     """
-    # Handle composite AND
-    if "and" in condition:
-        return all(evaluate_condition(c, event) for c in condition["and"])
+    # Handle composite AND (supports both 'and' from raw dicts and 'and_' from Pydantic model_dump)
+    and_sub = condition.get("and") or condition.get("and_")
+    if and_sub is not None:
+        return all(evaluate_condition(c, event) for c in and_sub)
 
-    # Handle composite OR
-    if "or" in condition:
-        return any(evaluate_condition(c, event) for c in condition["or"])
+    # Handle composite OR (supports both 'or' from raw dicts and 'or_' from Pydantic model_dump)
+    or_sub = condition.get("or") or condition.get("or_")
+    if or_sub is not None:
+        return any(evaluate_condition(c, event) for c in or_sub)
 
     # Handle existence check
-    if "exists" in condition:
+    if condition.get("exists") is not None:
         field = condition["exists"]
         val = event.get(field)
         return val is not None and val != ""

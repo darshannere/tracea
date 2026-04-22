@@ -13,7 +13,10 @@ class TokenUsage(BaseModel):
         return self
 
 
-EventType = Literal["session_start", "chat.completion", "tool_call", "tool_result", "error", "session_end"]
+EventType = Literal[
+    "session_start", "chat.completion", "tool_call", "tool_result", "error", "session_end",
+    "agent_turn", "heartbeat", "memory_compaction", "gateway_event",
+]
 
 
 class TracedEvent(BaseModel):
@@ -26,6 +29,7 @@ class TracedEvent(BaseModel):
     provider: Literal[
         "openai", "anthropic", "azure_openai", "ollama",
         "claude-code", "gemini-cli", "opencode", "tracea-mcp", "kimi",
+        "openclaw",
         "unknown",
     ] = "unknown"
     model: str = ""

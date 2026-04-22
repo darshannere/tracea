@@ -133,6 +133,7 @@ See individual plugin READMEs for full details:
 | **Claude Code** | Native hooks (`PreToolUse`/`PostToolUse`) | ✅ All tools | Copy `tracea-hook.sh` + add to `settings.json` |
 | **Gemini CLI** | Native hooks (`BeforeTool`/`AfterTool`) | ✅ All tools | Copy `tracea-hook.py` + add to `settings.json` |
 | **OpenCode** | Plugin system (`tool.execute.before`) | ✅ All tools | Copy `tracea-plugin.ts` to `~/.opencode/plugins/` |
+| **OpenClaw** | Plugin hooks (`api.on()`) | ✅ All tools | Add plugin path to `openclaw.json` |
 | **Kimi CLI** | Native hooks (`PreToolUse`/`PostToolUse`/`SessionStart`/`SessionEnd`) | ✅ All tools | Add hooks to `~/.kimi/config.toml` |
 | **Cursor** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Cursor MCP settings |
 | **Cline** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Cline MCP settings |

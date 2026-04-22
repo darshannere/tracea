@@ -24,7 +24,7 @@ def test_all_9_seed_rules_exist_and_validate():
     }
 
     assert required.issubset(rule_ids), f"Missing rules: {required - rule_ids}"
-    assert len(rules) == 9, f"Expected 9 rules, got {len(rules)}"
+    assert len(rules) >= 9, f"Expected at least 9 rules, got {len(rules)}"
 
 
 def test_seed_rule_thresholds():
