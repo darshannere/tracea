@@ -12,6 +12,7 @@ interface IssueDetail {
   detected_at: string
   rca_status: 'pending' | 'done' | 'failed' | null
   rca_text?: string
+  rca_structured?: string
   rule_description?: string
   captured_values?: string
   session_cost_total?: number
@@ -38,6 +39,12 @@ function formatDuration(ms: number | undefined): string {
 }
 
 function parseMarkdownish(text: string): React.ReactNode[] {
+  // Strip JSON code block if present — we render structured data separately
+  const jsonBlockMatch = text.match(/```json\s*([\s\S]*?)```/)
+  if (jsonBlockMatch) {
+    text = text.replace(jsonBlockMatch[0], '')
+  }
+
   const lines = text.split('\n')
   const nodes: React.ReactNode[] = []
   let key = 0
@@ -57,6 +64,22 @@ function parseMarkdownish(text: string): React.ReactNode[] {
           {trimmed.replace(/^##\s*/, '')}
         </h4>
       )
+      continue
+    }
+
+    // Heading: ### 1. Problem Summary
+    if (trimmed.startsWith('### ')) {
+      nodes.push(
+        <h5 key={key++} className="text-xs font-semibold text-zinc-700 mt-2 mb-1">
+          {trimmed.replace(/^###\s*\d*\.?\s*/, '')}
+        </h5>
+      )
+      continue
+    }
+
+    // Horizontal rule
+    if (trimmed === '---') {
+      nodes.push(<hr key={key++} className="border-zinc-200 my-2" />)
       continue
     }
 
@@ -95,6 +118,76 @@ function parseMarkdownish(text: string): React.ReactNode[] {
   }
 
   return nodes
+}
+
+interface StructuredRCA {
+  summary?: string
+  root_cause?: string
+  contributing_factors?: string[]
+  recommended_actions?: string[]
+  confidence?: string
+  key_evidence?: string[]
+}
+
+function StructuredRCAPanel({ json }: { json?: string }) {
+  if (!json) return null
+  let data: StructuredRCA
+  try {
+    data = JSON.parse(json)
+  } catch {
+    return null
+  }
+
+  const sections: { title: string; key: keyof StructuredRCA; icon: typeof Lightbulb }[] = [
+    { title: 'Summary', key: 'summary', icon: FileText },
+    { title: 'Root Cause', key: 'root_cause', icon: Bug },
+    { title: 'Key Evidence', key: 'key_evidence', icon: Zap },
+    { title: 'Contributing Factors', key: 'contributing_factors', icon: AlertTriangle },
+    { title: 'Recommended Actions', key: 'recommended_actions', icon: Wrench },
+  ]
+
+  const confidenceColor = (c?: string) => {
+    if (c === 'High') return 'bg-emerald-100 text-emerald-700'
+    if (c === 'Medium') return 'bg-amber-100 text-amber-700'
+    return 'bg-red-100 text-red-700'
+  }
+
+  return (
+    <div className="space-y-3">
+      {data.confidence && (
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] text-zinc-500">Confidence:</span>
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${confidenceColor(data.confidence)}`}>
+            {data.confidence}
+          </span>
+        </div>
+      )}
+      {sections.map(({ title, key, icon: Icon }) => {
+        const value = data[key]
+        if (!value || (Array.isArray(value) && value.length === 0)) return null
+        return (
+          <div key={title} className="space-y-1">
+            <h5 className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1">
+              <Icon className="h-3 w-3 text-zinc-500" />
+              {title}
+            </h5>
+            {Array.isArray(value) ? (
+              <ul className="space-y-0.5">
+                {value.map((item, i) => (
+                  <li key={i} className="flex gap-2 text-xs text-zinc-600">
+                    <span className="text-zinc-400 shrink-0">•</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-zinc-600 leading-relaxed">{value}</p>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function renderBold(text: string): React.ReactNode {
@@ -230,7 +323,7 @@ export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
       </div>
 
       {/* RCA Analysis */}
-      {issue.rca_text && (
+      {(issue.rca_text || issue.rca_structured) && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
@@ -245,9 +338,16 @@ export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
               View Session
             </Link>
           </div>
-          <div className="bg-white border border-zinc-200 rounded-md p-3.5">
-            {parseMarkdownish(issue.rca_text)}
-          </div>
+          {issue.rca_structured && (
+            <div className="bg-white border border-zinc-200 rounded-md p-3.5">
+              <StructuredRCAPanel json={issue.rca_structured} />
+            </div>
+          )}
+          {issue.rca_text && (
+            <div className="bg-white border border-zinc-200 rounded-md p-3.5">
+              {parseMarkdownish(issue.rca_text)}
+            </div>
+          )}
         </div>
       )}
 

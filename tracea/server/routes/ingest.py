@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from tracea.server.models import EventBatch
 from tracea.server.auth import bearer_auth
-from tracea.server.db import enqueue_events
+from tracea.server.db import enqueue_events, flush_events
 import asyncio
 from tracea.server.detection.engine import run_detection
 
@@ -21,8 +21,9 @@ async def ingest_events(
             detail={"error": "batch_too_large", "max": _MAX_BATCH_SIZE, "received": len(batch.events)}
         )
     await enqueue_events(batch.events)
+    await flush_events()
 
-    # Fire detection AFTER enqueue (SQLite commit is async via buffer flush)
+    # Fire detection AFTER commit
     asyncio.create_task(run_detection(batch.events))
 
     return {"accepted": len(batch.events)}
@@ -48,6 +49,7 @@ async def ingest_mcp_events(
         event.metadata["integration"] = "tracea-mcp"
 
     await enqueue_events(batch.events)
+    await flush_events()
     asyncio.create_task(run_detection(batch.events))
 
     return {"accepted": len(batch.events)}

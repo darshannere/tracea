@@ -72,8 +72,32 @@ async def _dispatch_loop() -> None:
         if not route:
             continue
 
+        # Enrich issue with session start time (and RCA if already done)
+        try:
+            db_gen = get_db()
+            db = await db_gen.__anext__()
+            cursor = await db.execute(
+                "SELECT started_at FROM sessions WHERE session_id = ?",
+                (session_id,)
+            )
+            row = await cursor.fetchone()
+            session_start = row["started_at"] if row else None
+
+            # Also fetch RCA text if already done
+            rca_cursor = await db.execute(
+                "SELECT rca_text, rca_structured FROM issues WHERE issue_id = ?",
+                (issue_id,)
+            )
+            rca_row = await rca_cursor.fetchone()
+            if rca_row and rca_row["rca_text"]:
+                issue["rca_text"] = rca_row["rca_text"]
+            if rca_row and rca_row["rca_structured"]:
+                issue["rca_structured"] = rca_row["rca_structured"]
+        except Exception:
+            session_start = None
+
         # Build payload
-        payload = format_alert_payload(issue, route.route_type, _BASE_URL)
+        payload = format_alert_payload(issue, route.route_type, _BASE_URL, session_start)
 
         # Try with retry
         success = False

@@ -12,7 +12,7 @@ class RCABackend(ABC):
     """Abstract RCA backend. All methods are async."""
 
     @abstractmethod
-    async def analyze(self, context: RCAContext, prompt: str | None = None) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
         """Returns RCA text content, or raises on failure."""
         ...
 
@@ -20,7 +20,7 @@ class RCABackend(ABC):
 class DisabledBackend(RCABackend):
     """No-op backend. Always returns empty string."""
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
         return ""
 
 
@@ -31,7 +31,7 @@ class OllamaBackend(RCABackend):
         self.base_url = base_url.rstrip("/")
         self.model = model or "llama3"
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
         """Call Ollama via OpenAI-compatible chat completions endpoint."""
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -43,6 +43,7 @@ class OllamaBackend(RCABackend):
                         {"role": "user", "content": prompt or ""},
                     ],
                     "stream": False,
+                    "max_tokens": max_tokens,
                 },
             )
             response.raise_for_status()
@@ -57,7 +58,7 @@ class OpenAIBackend(RCABackend):
         self.model = model or "gpt-4o"
         self.api_key = api_key
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
         """Call OpenAI chat completions API."""
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -73,6 +74,7 @@ class OpenAIBackend(RCABackend):
                         {"role": "user", "content": prompt or ""},
                     ],
                     "stream": False,
+                    "max_tokens": max_tokens,
                 },
             )
             response.raise_for_status()
@@ -88,7 +90,7 @@ class AnthropicBackend(RCABackend):
         self.api_key = api_key
         self.base_url = (base_url or "https://api.anthropic.com").rstrip("/")
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
         """Call Anthropic messages API."""
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -100,7 +102,7 @@ class AnthropicBackend(RCABackend):
                 },
                 json={
                     "model": self.model,
-                    "max_tokens": 512,
+                    "max_tokens": max_tokens,
                     "messages": [
                         {"role": "user", "content": prompt or ""},
                     ],

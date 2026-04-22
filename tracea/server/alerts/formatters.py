@@ -7,7 +7,7 @@ from typing import Literal
 _SEVERITY_BADGES = {
     "critical": ("[CRITICAL]", "danger"),
     "high": ("[HIGH]", "danger"),
-    "medium": ("[MEDIUM]", "warning"),
+    "medium": ("[MEDIUM]", "primary"),
     "low": ("[LOW]", "primary"),
 }
 

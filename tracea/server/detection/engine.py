@@ -1,6 +1,7 @@
 """DetectionEngine — evaluates rules against ingested events asynchronously."""
 import asyncio
 import json
+from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 from tracea.server.detection.watcher import get_rules
@@ -274,12 +275,36 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
         print(f"[tracea] Issue created: {rule.get('id', 'unknown')} ({rule.get('issue_category', '')}) for event {event_id}")
 
         # Fire alert (does NOT wait for RCA — fire-and-forget)
-        asyncio.create_task(_enqueue_alert(issue_id, session_id, rule.get('issue_category', ''), rule.get('severity', 'medium')))
+        asyncio.create_task(_enqueue_alert(
+            issue_id=issue_id,
+            session_id=session_id,
+            issue_type=rule.get('issue_category', ''),
+            severity=rule.get('severity', 'medium'),
+            session_cost_total=session_cost,
+            session_duration_ms=session_duration,
+            session_event_count=session_event_count,
+            error_message=error_msg,
+            rule_id=rule.get('id', ''),
+            rule_description=rule.get('description', ''),
+            detected_at=None,  # filled by dispatcher from DB if needed
+        ))
     except Exception as e:
         print(f"[tracea] Failed to create issue: {e}")
 
 
-async def _enqueue_alert(issue_id: str, session_id: str, issue_type: str, severity: str) -> None:
+async def _enqueue_alert(
+    issue_id: str,
+    session_id: str,
+    issue_type: str,
+    severity: str,
+    session_cost_total: float,
+    session_duration_ms: int,
+    session_event_count: int,
+    error_message: str,
+    rule_id: str,
+    rule_description: str,
+    detected_at: str | None,
+) -> None:
     """Enqueue issue for AlertDispatcher. Import lazily to avoid circular."""
     from tracea.server.alerts.dispatcher import enqueue_issue
     issue = {
@@ -287,5 +312,17 @@ async def _enqueue_alert(issue_id: str, session_id: str, issue_type: str, severi
         "session_id": session_id,
         "issue_type": issue_type,
         "severity": severity,
+        "session_cost_total": session_cost_total,
+        "session_duration_ms": session_duration_ms,
+        "session_event_count": session_event_count,
+        "error_message": error_message,
+        "rule_id": rule_id,
+        "rule_description": rule_description,
+        "detected_at": detected_at or _now_iso(),
     }
     await enqueue_issue(issue)
+
+
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
