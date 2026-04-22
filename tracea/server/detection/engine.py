@@ -147,7 +147,10 @@ async def run_detection(events: list) -> None:
         return
 
     for event in events:
-        event_id = str(getattr(event, 'event_id', event.get('event_id', '')))
+        if hasattr(event, 'get'):
+            event_id = str(event.get('event_id', ''))
+        else:
+            event_id = str(getattr(event, 'event_id', ''))
         if event_id in _processed_event_ids:
             continue
         _processed_event_ids.add(event_id)
