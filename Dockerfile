@@ -2,6 +2,7 @@
 FROM python:3.12-slim AS deps
 WORKDIR /app
 COPY pyproject.toml .
+COPY README.md .
 RUN pip install --no-cache-dir --prefix=/install -e .
 
 # Stage 2: Runtime

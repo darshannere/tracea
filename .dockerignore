@@ -8,6 +8,7 @@ __pycache__
 node_modules
 .env
 *.md
+!README.md
 tests/
 .planning/
 darshannere-main-design-20260419-181853.md
