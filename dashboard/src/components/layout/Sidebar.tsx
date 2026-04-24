@@ -1,9 +1,11 @@
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { Activity, AlertCircle, Settings } from 'lucide-react'
+import { LayoutDashboard, Activity, Bot, AlertCircle, Settings } from 'lucide-react'
 
 const navItems = [
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/sessions', icon: Activity, label: 'Sessions' },
+  { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/issues', icon: AlertCircle, label: 'Issues' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
