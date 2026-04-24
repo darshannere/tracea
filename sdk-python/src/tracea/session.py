@@ -12,7 +12,8 @@ from typing import Any
 from contextlib import asynccontextmanager
 
 # Session context: session_id, metadata dict, tags list, agent_id
-_session_ctx: ContextVar[dict[str, Any]] = ContextVar("session", default={})
+# Use None as sentinel default to avoid mutable default dict corruption
+_session_ctx: ContextVar[dict[str, Any] | None] = ContextVar("session", default=None)
 
 def derive_session_id() -> str:
     """Derive a deterministic session ID from hostname + process ID.
@@ -29,7 +30,8 @@ def get_session_ctx() -> dict[str, Any]:
     Returns empty dict if no session is active. Safe default —
     patched send() always has a session_id available.
     """
-    return _session_ctx.get()
+    ctx = _session_ctx.get()
+    return ctx if ctx is not None else {}
 
 @asynccontextmanager
 async def session(

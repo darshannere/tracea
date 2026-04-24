@@ -34,7 +34,7 @@ def _event_to_dict(event) -> dict:
     }
 
 
-def _rule_matches(rule: dict, event_dict: dict) -> bool:
+async def _rule_matches(rule: dict, event_dict: dict) -> bool:
     """Check if a rule matches an event."""
     condition = rule.get('condition', {})
     if not evaluate_condition(condition, event_dict):
@@ -51,7 +51,7 @@ def _rule_matches(rule: dict, event_dict: dict) -> bool:
     # Check session_rules (count-within-session aggregation)
     sess = rule.get('session_rules')
     if sess:
-        if not _evaluate_session_rule_sync(sess, event_dict.get('session_id', '')):
+        if not await _evaluate_session_rule(sess, event_dict.get('session_id', '')):
             return False
 
     return True
@@ -83,8 +83,8 @@ def _check_repetition_for_rule(event_dict: dict, rep_field: str, min_count: int,
     return count >= min_count
 
 
-def _evaluate_session_rule_sync(sess: dict, session_id: str) -> bool:
-    """Evaluate a session_rules aggregation synchronously."""
+async def _evaluate_session_rule(sess: dict, session_id: str) -> bool:
+    """Evaluate a session_rules aggregation asynchronously."""
     count_field = sess.get('count_field', '')
     aggregation = sess.get('aggregation', 'sum')
     threshold = sess.get('threshold', 0)
@@ -94,20 +94,6 @@ def _evaluate_session_rule_sync(sess: dict, session_id: str) -> bool:
         return False
 
     from tracea.server.db import get_db
-    import asyncio
-
-    # Get the event loop - this is called from async context
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        db_gen = get_db()
-        db = loop.run_until_complete(db_gen.__anext__())
-    else:
-        # We need to run sync, but we're in async context
-        # For now, return True (skip session rule check if DB unavailable)
-        return True
 
     # Build query for aggregation
     col_map = {
@@ -119,8 +105,13 @@ def _evaluate_session_rule_sync(sess: dict, session_id: str) -> bool:
     col = col_map.get(aggregation, count_field)
 
     try:
-        cursor = loop.run_until_complete(db.execute(f"SELECT {col} as val FROM events WHERE session_id = ?", (session_id,)))
-        row = loop.run_until_complete(cursor.fetchone())
+        db_gen = get_db()
+        db = await db_gen.__anext__()
+        cursor = await db.execute(
+            f"SELECT {col} as val FROM events WHERE session_id = ?",
+            (session_id,),
+        )
+        row = await cursor.fetchone()
         if row is None:
             return False
         val = row['val'] or 0
@@ -160,7 +151,7 @@ async def run_detection(events: list) -> None:
 
         for rule in rules:
             try:
-                if _rule_matches(rule, event_dict):
+                if await _rule_matches(rule, event_dict):
                     await _create_issue(event, rule, event_dict)
             except Exception as e:
                 print(f"[tracea] Rule evaluation error for {rule.get('id', 'unknown')}: {e}")

@@ -27,7 +27,8 @@ class MCPClient:
         self._msg_id = 0
 
     def send(self, method: str, params: dict | None = None) -> dict | None:
-        """Send a JSON-RPC request. Returns the response dict, or None for notifications."""
+        """Send a JSON-RPC request with Content-Length framing.
+        Returns the response dict, or None for notifications."""
         self._msg_id += 1
         msg = {
             "jsonrpc": "2.0",
@@ -35,25 +36,60 @@ class MCPClient:
             "method": method,
             "params": params or {},
         }
-        line = json.dumps(msg, ensure_ascii=False) + "\n"
-        self.proc.stdin.write(line.encode("utf-8"))
+        body = json.dumps(msg, ensure_ascii=False).encode("utf-8")
+        header = f"Content-Length: {len(body)}\r\n\r\n".encode("utf-8")
+        self.proc.stdin.write(header + body)
         self.proc.stdin.flush()
         # Notifications (methods starting with "notifications/") do not receive
         # a response from the server — return None immediately.
         if method.startswith("notifications/"):
             return None
-        return self._read_line(timeout=15.0)
+        return self._read_message(timeout=15.0)
 
-    def _read_line(self, timeout: float = 10.0) -> dict:
+    def _read_message(self, timeout: float = 10.0) -> dict:
+        """Read a JSON-RPC message with Content-Length framing."""
+        import fcntl
+        fd = self.proc.stdout.fileno()
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+
         deadline = time.monotonic() + timeout
+        buf = b""
+
         while True:
-            ready, _, _ = select.select([self.proc.stdout], [], [], 0.1)
-            if ready:
-                raw = self.proc.stdout.readline()
-                if raw:
-                    return json.loads(raw.decode("utf-8").strip())
+            try:
+                chunk = self.proc.stdout.read(4096)
+                if chunk:
+                    buf += chunk
+            except BlockingIOError:
+                pass
+
+            # Try to parse a complete message from buffer
+            while True:
+                header_end = buf.find(b"\r\n\r\n")
+                if header_end == -1:
+                    break
+                header = buf[:header_end].decode("utf-8")
+                body_start = header_end + 4
+                msg_length = None
+                for line in header.split("\r\n"):
+                    if line.lower().startswith("content-length:"):
+                        try:
+                            msg_length = int(line.split(":", 1)[1].strip())
+                        except ValueError:
+                            pass
+                        break
+                if msg_length is None:
+                    raise ValueError("Missing Content-Length header")
+                if len(buf) < body_start + msg_length:
+                    break
+                body = buf[body_start:body_start + msg_length]
+                buf = buf[body_start + msg_length:]
+                return json.loads(body.decode("utf-8"))
+
             if time.monotonic() > deadline:
                 raise TimeoutError(f"No response after {timeout}s")
+            time.sleep(0.05)
 
 
 class EventCapture:

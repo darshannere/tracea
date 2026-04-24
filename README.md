@@ -2,6 +2,112 @@
 
 Self-hosted AI agent observability platform. Trace LLM sessions, detect issues, get AI-powered root cause analysis, and route alerts — all in one place.
 
+## Quick Start
+
+### Option A: Docker (fastest, recommended)
+
+```bash
+# Clone and enter the repo
+git clone https://github.com/darshannere/tracea.git
+cd tracea
+
+# Build and start
+docker-compose up --build
+
+# The server starts on http://localhost:8080
+# API key is printed in the logs and written to ./data/api_key.txt
+# Dashboard: http://localhost:8080/dashboard/
+```
+
+### Option B: Local Development
+
+**1. Install dependencies**
+
+```bash
+# Backend
+pip install -e "."
+
+# Dashboard
+cd dashboard && npm install && npm run build && cd ..
+
+# Python SDK (optional)
+cd sdk-python && pip install -e "." && cd ..
+```
+
+**2. Set up environment**
+
+```bash
+cp .env.example .env
+
+# Copy default rules/alerts so the server finds them on first run
+mkdir -p data
+cp tracea/server/detection/defaults/detection_rules.yaml data/
+cp tracea/server/alerts.yaml data/
+```
+
+**3. Start the server**
+
+```bash
+# Load env vars
+export $(grep -v '^#' .env | xargs)
+
+# Start server
+uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 --workers 1
+```
+
+The server will:
+- Start on `http://localhost:8080`
+- Generate an API key on first run (saved to `./data/api_key.txt`)
+- Serve the dashboard at `http://localhost:8080/dashboard/`
+- Hot-reload detection rules and alerts from `./data/`
+
+**4. Open the dashboard**
+
+Go to `http://localhost:8080/dashboard/` and paste your API key when prompted.
+
+**5. Send your first event**
+
+```bash
+API_KEY=$(cat data/api_key.txt)
+
+curl -X POST http://localhost:8080/api/v1/events \
+  -H "Authorization: Bearer $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [{
+      "event_id": "evt-001",
+      "session_id": "sess-001",
+      "agent_id": "my-agent",
+      "sequence": 1,
+      "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'",
+      "type": "chat.completion",
+      "provider": "openai",
+      "model": "gpt-4o",
+      "role": "user",
+      "content": "Hello, world!",
+      "duration_ms": 120,
+      "tokens_used": {"input": 10, "output": 5, "total": 15},
+      "cost_usd": 0.0003
+    }]
+  }'
+```
+
+Refresh the dashboard — your session appears in the Sessions view.
+
+---
+
+## Dev Mode (Local Development Only)
+
+For zero-friction local development, enable dev mode to bypass API key authentication:
+
+```bash
+TRACEA_DEV_MODE=1 uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080
+```
+
+**Never use `TRACEA_DEV_MODE=1` in production.**
+
+---
+
 ## Features
 
 - **Session Tracking** — Automatically trace LLM calls, tool executions, errors, and session lifecycle
@@ -10,6 +116,8 @@ Self-hosted AI agent observability platform. Trace LLM sessions, detect issues, 
 - **AI-Powered RCA** — Root cause analysis powered by LLMs (OpenAI, Anthropic, or local Ollama)
 - **Alert Routing** — Route issues to Slack or generic webhooks with per-destination rate limiting
 - **SDK + MCP** — Python SDK with auto-instrumentation, MCP server for agent integration, and native hook plugins for Claude Code / Gemini CLI / OpenCode
+
+---
 
 ## Project Structure
 
@@ -25,21 +133,23 @@ tracea/
 │   │   └── alerts/         # Alert dispatcher
 │   └── server/migrations/  # Schema migrations
 ├── dashboard/              # React 18 + Vite dashboard
-│   └── src/
-│       ├── pages/          # Sessions, Issues, Settings
-│       └── components/     # Charts, layout, settings
+│   └── dist/               # Production build (served by FastAPI)
 ├── sdk-python/             # Python SDK for manual tracing
 ├── tracea-mcp/             # MCP server for Claude Code integration
-├── data/                   # SQLite database (created at runtime)
+├── data/                   # SQLite database + user config (created at runtime)
 ├── docker-compose.yml      # Docker deployment
 └── .env.example            # Env var template
 ```
+
+---
 
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 20+ (for dashboard dev)
 - SQLite 3.45+ (for WAL mode)
+
+---
 
 ## Installation
 
@@ -58,6 +168,12 @@ uv pip install -e "."
 ```bash
 cd dashboard
 npm install
+
+# Development (Vite dev server on port 5173)
+npm run dev
+
+# Production build (required for FastAPI to serve it)
+npm run build
 ```
 
 ### 3. Python SDK (optional)
@@ -126,6 +242,8 @@ See individual plugin READMEs for full details:
 - [Gemini CLI plugin](tracea-plugins/gemini/README.md)
 - [OpenCode plugin](tracea-plugins/opencode/README.md)
 
+---
+
 ## Agent Integration Matrix
 
 | Agent | Integration | Auto-captures tool calls | Installation |
@@ -141,6 +259,8 @@ See individual plugin READMEs for full details:
 | **Python scripts** | SDK auto-instrumentation | ✅ All httpx LLM calls + manual logs | `pip install tracea` + `tracea.init()` |
 
 **Native hooks** intercept every tool call automatically. **MCP** adds tracea as a tool the agent can call — the agent decides when to use it.
+
+---
 
 ## MCP Configuration
 
@@ -198,9 +318,11 @@ These agents have no native hooks — use MCP:
 uvx tracea-mcp --api-key YOUR_API_KEY --server-url http://localhost:8080 --agent-id cursor
 ```
 
+---
+
 ## Configuration
 
-Copy the example env file and fill in your values:
+Copy the example env file and adjust for your setup:
 
 ```bash
 cp .env.example .env
@@ -211,13 +333,18 @@ Key variables:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TRACEA_DB_PATH` | SQLite database path | `./data/tracea.db` |
-| `TRACEA_RULES_PATH` | Detection rules YAML | `./tracea/server/detection/defaults/detection_rules.yaml` |
-| `TRACEA_ALERTS_PATH` | Alerts routing YAML | `./tracea/server/alerts.yaml` |
+| `TRACEA_API_KEY_FILE` | Where to read/write the API key | `./data/api_key.txt` |
+| `TRACEA_DATA_DIR` | Directory for user-edited config (rules, alerts) | `./data` |
+| `TRACEA_RULES_PATH` | Detection rules YAML path | `./data/detection_rules.yaml` |
+| `TRACEA_ALERTS_PATH` | Alerts routing YAML path | `./data/alerts.yaml` |
+| `TRACEA_DEV_MODE` | Set to `1` to bypass auth (local dev only) | — |
 | `TRACEA_RCA_BACKEND` | RCA LLM backend: `disabled`, `openai`, `anthropic`, `ollama` | `disabled` |
 | `TRACEA_RCA_MODEL` | Model to use for RCA | backend default |
 | `TRACEA_RCA_BASE_URL` | Custom base URL (for Ollama or proxies) | — |
 | `OPENAI_API_KEY` | Required if using OpenAI RCA | — |
 | `ANTHROPIC_API_KEY` | Required if using Anthropic RCA | — |
+
+---
 
 ## Running
 
@@ -226,37 +353,42 @@ Key variables:
 ```bash
 # Load env vars and start server
 export $(grep -v '^#' .env | xargs)
-uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080
+uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 --workers 1
 ```
 
 Or in the background:
 
 ```bash
 export $(grep -v '^#' .env | xargs)
-uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 > /tmp/tracea.log 2>&1 &
+uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 --workers 1 > /tmp/tracea.log 2>&1 &
 ```
 
-The server will:
-- Start on `http://localhost:8080`
-- Auto-generate an API key on first run (printed to console)
-- Load default detection rules if none exist
-- Start the RCA background worker (if configured)
-- Poll for new issues every 5 seconds
-
 ### Dashboard
+
+The dashboard is served automatically by FastAPI at `http://localhost:8080/dashboard/` after you build it:
+
+```bash
+cd dashboard
+npm run build
+```
+
+For dashboard development with hot reload:
 
 ```bash
 cd dashboard
 npm run dev
+# Opens on http://localhost:5173
 ```
-
-Open `http://localhost:5173`. Paste the API key from the server console into the auth prompt.
 
 ### Docker
 
 ```bash
 docker-compose up --build
 ```
+
+The server starts on port 8080, persists data to `./data/`, and the dashboard is available at `http://localhost:8080/dashboard/`.
+
+---
 
 ## Detection Rules
 
@@ -280,6 +412,8 @@ Supported operators: `eq`, `equals`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`,
 
 Composite conditions with `and` / `or` and repetition detection are also supported.
 
+---
+
 ## Alerts
 
 Alert routing is configured in Settings → `alerts.yaml`:
@@ -293,6 +427,8 @@ routes:
 ```
 
 Use `issue_category: "*"` as a catch-all fallback.
+
+---
 
 ## RCA Setup
 
@@ -325,6 +461,8 @@ TRACEA_RCA_BASE_URL=http://localhost:11434
 TRACEA_RCA_MODEL=llama3
 ```
 
+---
+
 ## API
 
 | Endpoint | Description |
@@ -338,7 +476,9 @@ TRACEA_RCA_MODEL=llama3
 | `GET /api/v1/config/alerts` | Read alerts YAML |
 | `PUT /api/v1/config/alerts` | Write alerts YAML |
 
-All API endpoints require `Authorization: Bearer {api_key}`.
+All API endpoints require `Authorization: Bearer {api_key}` (unless `TRACEA_DEV_MODE=1` is set).
+
+---
 
 ## Development
 
@@ -355,6 +495,8 @@ cd sdk-python && pytest
 # Run MCP tests
 cd tracea-mcp && pytest
 ```
+
+---
 
 ## License
 

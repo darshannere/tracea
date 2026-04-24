@@ -130,7 +130,6 @@ class MCPServer:
 
         def signal_handler(sig, frame):
             self.running = False
-            loop.quit()
 
         signal.signal(signal.SIGINT, signal_handler)
         signal.signal(signal.SIGTERM, signal_handler)
