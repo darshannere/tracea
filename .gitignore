@@ -13,6 +13,7 @@ data/
 *.egg-info/
 dashboard/package-lock.json
 *.png
+!.github/*.png
 
 # Temp / scratch files
 run_detection.py

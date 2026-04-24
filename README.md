@@ -1,71 +1,83 @@
-# tracea
+<div align="center">
 
-Self-hosted AI agent observability platform. Trace LLM sessions, detect issues, get AI-powered root cause analysis, and route alerts — all in one place.
+# 🔭 tracea
 
-## Quick Start
+**Self-hosted AI agent observability. Own your data.**
 
-### Option A: Docker (fastest, recommended)
+Trace LLM sessions, detect anomalies, analyze root causes, and route alerts — all from a single dashboard.
+
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen.svg)](#development)
+[![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
+
+</div>
+
+---
+
+## 📸 Screenshots
+
+| Overview | Sessions | Issues |
+|----------|----------|--------|
+| ![Dashboard](.github/screenshot-dashboard.png) | ![Sessions](.github/screenshot-sessions.png) | ![Issues](.github/screenshot-issues.png) |
+
+---
+
+## ✨ Why tracea?
+
+Most AI observability tools are **cloud-hosted SaaS** that ship your agent data to someone else's servers. tracea is different:
+
+| | Cloud SaaS | **tracea** |
+|---|---|---|
+| **Data ownership** | ❌ Their servers | ✅ **Your server** |
+| **Framework lock-in** | ❌ Vendor SDKs | ✅ **Transport patching** — works with any framework |
+| **Rules** | ❌ Hidden/black-box | ✅ **YAML rules** — inspectable, version-controlled |
+| **Cost** | ❌ Per-seat / per-event pricing | ✅ **Free & open source** |
+| **Alerting** | ❌ Limited integrations | ✅ **Slack + generic webhooks** — route anywhere |
+
+---
+
+## 🚀 Quick Start
+
+### Docker (recommended)
 
 ```bash
-# Clone and enter the repo
 git clone https://github.com/darshannere/tracea.git
 cd tracea
-
-# Build and start
 docker-compose up --build
-
-# The server starts on http://localhost:8080
-# API key is printed in the logs and written to ./data/api_key.txt
-# Dashboard: http://localhost:8080/dashboard/
 ```
 
-### Option B: Local Development
+- Server: `http://localhost:8080`
+- Dashboard: `http://localhost:5173`
+- API key: printed in logs + written to `./data/api_key.txt`
 
-**1. Install dependencies**
+### Local Development
+
+**1. Backend**
 
 ```bash
-# Backend
 pip install -e "."
 
-# Dashboard
-cd dashboard && npm install && npm run build && cd ..
-
-# Python SDK (optional)
-cd sdk-python && pip install -e "." && cd ..
-```
-
-**2. Set up environment**
-
-```bash
 cp .env.example .env
-
-# Copy default rules/alerts so the server finds them on first run
 mkdir -p data
 cp tracea/server/detection/defaults/detection_rules.yaml data/
 cp tracea/server/alerts.yaml data/
-```
 
-**3. Start the server**
-
-```bash
-# Load env vars
 export $(grep -v '^#' .env | xargs)
-
-# Start server
 uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 --workers 1
 ```
 
-The server will:
-- Start on `http://localhost:8080`
-- Generate an API key on first run (saved to `./data/api_key.txt`)
-- Serve the dashboard at `http://localhost:8080/dashboard/`
-- Hot-reload detection rules and alerts from `./data/`
+**2. Dashboard (separate terminal)**
 
-**4. Open the dashboard**
+```bash
+cd dashboard
+npm install
+npm run dev
+```
 
-Go to `http://localhost:8080/dashboard/` and paste your API key when prompted.
+Open `http://localhost:5173` and paste your API key.
 
-**5. Send your first event**
+**3. Send an event**
 
 ```bash
 API_KEY=$(cat data/api_key.txt)
@@ -92,34 +104,141 @@ curl -X POST http://localhost:8080/api/v1/events \
   }'
 ```
 
-Refresh the dashboard — your session appears in the Sessions view.
+Refresh the dashboard — your session appears instantly.
 
 ---
 
-## Dev Mode (Local Development Only)
+## 🏗️ Architecture
 
-For zero-friction local development, enable dev mode to bypass API key authentication:
+```
+┌─────────────────────────────────────────────────────────────┐
+│  tracea Server (FastAPI + SQLite WAL)      port 8080       │
+│  ├── Ingest API  →  Batch writer  →  SQLite                │
+│  ├── Detection Engine  →  YAML rules  →  Issues table      │
+│  ├── RCA Worker  →  OpenAI / Anthropic / Ollama            │
+│  └── Alert Dispatcher  →  Slack / Webhooks                 │
+└─────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ HTTP
+┌─────────────────────────────────────────────────────────────┐
+│  tracea Dashboard (React 18 + Vite)        port 5173       │
+│  ├── Sessions, Events, Issues, Agents                      │
+│  ├── Cost / Token / Duration charts (Recharts)             │
+│  └── Settings editor for rules & alerts                    │
+└─────────────────────────────────────────────────────────────┘
+                              ▲
+                              │ SDK / MCP / Hooks
+┌─────────────────────────────────────────────────────────────┐
+│  Your Agents                                                │
+│  ├── Python SDK (httpx patch) → OpenAI, Anthropic, Azure   │
+│  ├── tracea-mcp (stdio JSON-RPC) → Claude Code, Cursor     │
+│  └── Native hooks → Claude Code, Gemini CLI, Kimi, OpenCode│
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🧩 Features
+
+### 🔍 Session Tracking
+Automatically trace LLM calls, tool executions, errors, and session lifecycle. Works with any framework through transport-level interception.
+
+### 📊 Real-time Dashboard
+React dashboard with cost trends, token usage, duration distribution, session health, and agent breakdowns.
+
+### 🚨 Issue Detection
+YAML-configurable detection rules for:
+- Tool errors & task failures
+- High cost & high latency
+- Rate limits & repeated calls
+- Infinite loops & empty responses
+
+Rules hot-reload on save — no server restart needed.
+
+### 🧠 AI-Powered RCA
+Root cause analysis powered by LLMs:
+- **OpenAI** — GPT-4o, etc.
+- **Anthropic** — Claude Sonnet, etc.
+- **Ollama** — local, free, private
+
+Disabled by default. Cloud backends show a warning banner.
+
+### 📡 Alert Routing
+Route issues to Slack or generic HTTP webhooks:
+- Per-destination rate limiting
+- Deduplication (60s window)
+- Exponential backoff retry (3 attempts)
+- Dead-letter table for permanent failures
+
+---
+
+## 🔌 Agent Integration
+
+| Agent | Integration | Auto-captures | Install |
+|-------|-------------|---------------|---------|
+| **Claude Code** | Native hooks | ✅ All tools | `tracea-hook.sh` + `settings.json` |
+| **Gemini CLI** | Native hooks | ✅ All tools | `tracea-hook.py` + `settings.json` |
+| **Kimi CLI** | Native hooks | ✅ All tools | `tracea-hook.py` + `config.toml` |
+| **OpenCode** | Plugin system | ✅ All tools | `tracea-plugin.ts` → `~/.opencode/plugins/` |
+| **OpenClaw** | Plugin hooks | ✅ All tools | `openclaw.json` |
+| **Cursor** | MCP | ⚠️ Explicit calls | `tracea-mcp` |
+| **Cline** | MCP | ⚠️ Explicit calls | `tracea-mcp` |
+| **Zed** | MCP | ⚠️ Explicit calls | `tracea-mcp` |
+| **Python scripts** | SDK | ✅ All LLM calls | `pip install tracea` |
+
+See [tracea-plugins/](tracea-plugins/) for full setup guides.
+
+---
+
+## ⚙️ Configuration
+
+Copy the example env file and adjust:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `TRACEA_DB_PATH` | SQLite database path | `./data/tracea.db` |
+| `TRACEA_API_KEY_FILE` | API key read/write path | `./data/api_key.txt` |
+| `TRACEA_DATA_DIR` | Config directory (rules, alerts) | `./data` |
+| `TRACEA_RULES_PATH` | Detection rules YAML | `./data/detection_rules.yaml` |
+| `TRACEA_ALERTS_PATH` | Alerts routing YAML | `./data/alerts.yaml` |
+| `TRACEA_RCA_BACKEND` | `disabled` / `openai` / `anthropic` / `ollama` | `disabled` |
+| `TRACEA_DEV_MODE` | `1` = bypass auth (local only) | — |
+
+### Dev Mode
+
+For zero-friction local development:
 
 ```bash
 TRACEA_DEV_MODE=1 uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080
 ```
 
-**Never use `TRACEA_DEV_MODE=1` in production.**
+**Never use in production.**
 
 ---
 
-## Features
+## 🛠️ Development
 
-- **Session Tracking** — Automatically trace LLM calls, tool executions, errors, and session lifecycle
-- **Real-time Dashboard** — React dashboard with insights visualizations: cost trends, token usage, duration distribution, session health, and more
-- **Issue Detection** — YAML-configurable detection rules for tool errors, high cost, high latency, rate limits, repeated calls, infinite loops, and more
-- **AI-Powered RCA** — Root cause analysis powered by LLMs (OpenAI, Anthropic, or local Ollama)
-- **Alert Routing** — Route issues to Slack or generic webhooks with per-destination rate limiting
-- **SDK + MCP** — Python SDK with auto-instrumentation, MCP server for agent integration, and native hook plugins for Claude Code / Gemini CLI / OpenCode
+```bash
+# Backend tests
+pytest tests/
+
+# SDK tests
+cd sdk-python && pytest
+
+# MCP tests
+cd tracea-mcp && pytest
+
+# Dashboard
+cd dashboard && npm run build
+```
 
 ---
 
-## Project Structure
+## 📦 Project Structure
 
 ```
 tracea/
@@ -127,377 +246,22 @@ tracea/
 │   ├── server/
 │   │   ├── main.py         # App entry point
 │   │   ├── db.py           # SQLite + WAL
-│   │   ├── routes/         # API routes (sessions, issues, config)
+│   │   ├── routes/         # API routes
 │   │   ├── detection/      # Rule engine + watcher
 │   │   ├── rca/            # RCA worker + LLM backends
 │   │   └── alerts/         # Alert dispatcher
 │   └── server/migrations/  # Schema migrations
 ├── dashboard/              # React 18 + Vite dashboard
-│   └── dist/               # Production build (served by FastAPI)
-├── sdk-python/             # Python SDK for manual tracing
-├── tracea-mcp/             # MCP server for Claude Code integration
-├── data/                   # SQLite database + user config (created at runtime)
-├── docker-compose.yml      # Docker deployment
-└── .env.example            # Env var template
+├── sdk-python/             # Python SDK
+├── tracea-mcp/             # MCP server
+├── tracea-plugins/         # Agent hook plugins
+├── data/                   # SQLite + config (runtime)
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
 
-## Prerequisites
+## 📝 License
 
-- Python 3.11+
-- Node.js 20+ (for dashboard dev)
-- SQLite 3.45+ (for WAL mode)
-
----
-
-## Installation
-
-### 1. Backend
-
-```bash
-# Install backend dependencies
-pip install -e "."
-
-# Or with uv
-uv pip install -e "."
-```
-
-### 2. Dashboard
-
-```bash
-cd dashboard
-npm install
-
-# Development (Vite dev server on port 5173)
-npm run dev
-
-# Production build (required for FastAPI to serve it)
-npm run build
-```
-
-### 3. Python SDK (optional)
-
-```bash
-cd sdk-python
-pip install -e "."
-```
-
-See [sdk-python/README.md](sdk-python/README.md) for usage examples.
-
-### 4. MCP Server (optional)
-
-```bash
-cd tracea-mcp
-pip install -e "."
-```
-
-Or install from PyPI:
-
-```bash
-pip install tracea-mcp
-# or
-uvx tracea-mcp --api-key YOUR_KEY --server-url http://localhost:8080
-```
-
-### 5. Agent Plugins (optional)
-
-For agents that support native lifecycle hooks (Claude Code, Gemini CLI, OpenCode), copy the relevant plugin from `tracea-plugins/`:
-
-```bash
-# Claude Code — copy hook script
-chmod +x tracea-plugins/claude-code/tracea-hook.sh
-cp tracea-plugins/claude-code/tracea-hook.sh ~/.local/bin/
-
-# Then add to ~/.claude/settings.json:
-# {
-#   "hooks": {
-#     "PreToolUse": "tracea-hook.sh pre",
-#     "PostToolUse": "tracea-hook.sh post",
-#     "Stop": "tracea-hook.sh stop"
-#   }
-# }
-
-# Gemini CLI — copy hook script
-chmod +x tracea-plugins/gemini/tracea-hook.py
-cp tracea-plugins/gemini/tracea-hook.py ~/.local/bin/
-
-# Then add to ~/.gemini/settings.json:
-# {
-#   "hooks": {
-#     "BeforeTool": ["python3", "tracea-hook.py", "before_tool"],
-#     "AfterTool": ["python3", "tracea-hook.py", "after_tool"],
-#     "SessionStart": ["python3", "tracea-hook.py", "session_start"],
-#     "SessionEnd": ["python3", "tracea-hook.py", "session_end"]
-#   }
-# }
-
-# OpenCode — copy plugin
-cp tracea-plugins/opencode/tracea-plugin.ts ~/.opencode/plugins/
-# Auto-discovered on startup
-```
-
-See individual plugin READMEs for full details:
-- [Claude Code plugin](tracea-plugins/claude-code/README.md)
-- [Gemini CLI plugin](tracea-plugins/gemini/README.md)
-- [OpenCode plugin](tracea-plugins/opencode/README.md)
-
----
-
-## Agent Integration Matrix
-
-| Agent | Integration | Auto-captures tool calls | Installation |
-|-------|-------------|--------------------------|--------------|
-| **Claude Code** | Native hooks (`PreToolUse`/`PostToolUse`) | ✅ All tools | Copy `tracea-hook.sh` + add to `settings.json` |
-| **Gemini CLI** | Native hooks (`BeforeTool`/`AfterTool`) | ✅ All tools | Copy `tracea-hook.py` + add to `settings.json` |
-| **OpenCode** | Plugin system (`tool.execute.before`) | ✅ All tools | Copy `tracea-plugin.ts` to `~/.opencode/plugins/` |
-| **OpenClaw** | Plugin hooks (`api.on()`) | ✅ All tools | Add plugin path to `openclaw.json` |
-| **Kimi CLI** | Native hooks (`PreToolUse`/`PostToolUse`/`SessionStart`/`SessionEnd`) | ✅ All tools | Add hooks to `~/.kimi/config.toml` |
-| **Cursor** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Cursor MCP settings |
-| **Cline** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Cline MCP settings |
-| **Zed** | MCP (additive tools) | ⚠️ Only explicit calls | Add `tracea-mcp` to Zed MCP settings |
-| **Python scripts** | SDK auto-instrumentation | ✅ All httpx LLM calls + manual logs | `pip install tracea` + `tracea.init()` |
-
-**Native hooks** intercept every tool call automatically. **MCP** adds tracea as a tool the agent can call — the agent decides when to use it.
-
----
-
-## MCP Configuration
-
-### Kimi CLI
-
-Kimi supports **native hooks** (recommended) or MCP.
-
-**Native hooks** — add to `~/.kimi/config.toml`:
-```toml
-[[hooks]]
-event = "PreToolUse"
-command = "python3 ~/.kimi/hooks/tracea-hook.py pre"
-
-[[hooks]]
-event = "PostToolUse"
-command = "python3 ~/.kimi/hooks/tracea-hook.py post"
-
-[[hooks]]
-event = "PostToolUseFailure"
-command = "python3 ~/.kimi/hooks/tracea-hook.py post_failure"
-
-[[hooks]]
-event = "SessionStart"
-command = "python3 ~/.kimi/hooks/tracea-hook.py session_start"
-
-[[hooks]]
-event = "SessionEnd"
-command = "python3 ~/.kimi/hooks/tracea-hook.py session_end"
-```
-
-See [tracea-plugins/kimi/README.md](tracea-plugins/kimi/README.md) for the hook script.
-
-**MCP** (alternative, not recommended):
-```json
-{
-  "mcpServers": {
-    "tracea": {
-      "command": "uvx",
-      "args": [
-        "tracea-mcp",
-        "--api-key", "YOUR_API_KEY",
-        "--server-url", "http://localhost:8080",
-        "--agent-id", "kimi"
-      ]
-    }
-  }
-}
-```
-
-### Cursor / Cline / Zed
-
-These agents have no native hooks — use MCP:
-
-```bash
-uvx tracea-mcp --api-key YOUR_API_KEY --server-url http://localhost:8080 --agent-id cursor
-```
-
----
-
-## Configuration
-
-Copy the example env file and adjust for your setup:
-
-```bash
-cp .env.example .env
-```
-
-Key variables:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TRACEA_DB_PATH` | SQLite database path | `./data/tracea.db` |
-| `TRACEA_API_KEY_FILE` | Where to read/write the API key | `./data/api_key.txt` |
-| `TRACEA_DATA_DIR` | Directory for user-edited config (rules, alerts) | `./data` |
-| `TRACEA_RULES_PATH` | Detection rules YAML path | `./data/detection_rules.yaml` |
-| `TRACEA_ALERTS_PATH` | Alerts routing YAML path | `./data/alerts.yaml` |
-| `TRACEA_DEV_MODE` | Set to `1` to bypass auth (local dev only) | — |
-| `TRACEA_RCA_BACKEND` | RCA LLM backend: `disabled`, `openai`, `anthropic`, `ollama` | `disabled` |
-| `TRACEA_RCA_MODEL` | Model to use for RCA | backend default |
-| `TRACEA_RCA_BASE_URL` | Custom base URL (for Ollama or proxies) | — |
-| `OPENAI_API_KEY` | Required if using OpenAI RCA | — |
-| `ANTHROPIC_API_KEY` | Required if using Anthropic RCA | — |
-
----
-
-## Running
-
-### Backend
-
-```bash
-# Load env vars and start server
-export $(grep -v '^#' .env | xargs)
-uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 --workers 1
-```
-
-Or in the background:
-
-```bash
-export $(grep -v '^#' .env | xargs)
-uvicorn tracea.server.main:app --host 0.0.0.0 --port 8080 --workers 1 > /tmp/tracea.log 2>&1 &
-```
-
-### Dashboard
-
-The dashboard is served automatically by FastAPI at `http://localhost:8080/dashboard/` after you build it:
-
-```bash
-cd dashboard
-npm run build
-```
-
-For dashboard development with hot reload:
-
-```bash
-cd dashboard
-npm run dev
-# Opens on http://localhost:5173
-```
-
-### Docker
-
-```bash
-docker-compose up --build
-```
-
-The server starts on port 8080, persists data to `./data/`, and the dashboard is available at `http://localhost:8080/dashboard/`.
-
----
-
-## Detection Rules
-
-Rules are written in YAML and hot-reloaded on save. Edit them in Settings → `detection_rules.yaml`.
-
-Example rule:
-
-```yaml
-rules:
-  - id: high_cost
-    description: "Individual call cost exceeds $0.05"
-    condition:
-      field: cost_usd
-      op: gt
-      value: 0.05
-    issue_category: high_cost
-    severity: high
-```
-
-Supported operators: `eq`, `equals`, `ne`, `gt`, `gte`, `lt`, `lte`, `contains`, `starts_with`, `exists`
-
-Composite conditions with `and` / `or` and repetition detection are also supported.
-
----
-
-## Alerts
-
-Alert routing is configured in Settings → `alerts.yaml`:
-
-```yaml
-routes:
-  - issue_category: tool_error
-    route_type: slack
-    webhook_url: "${SLACK_WEBHOOK_URL}"
-    rate_limit_rpm: 60
-```
-
-Use `issue_category: "*"` as a catch-all fallback.
-
----
-
-## RCA Setup
-
-Enable AI-powered root cause analysis by setting an LLM backend in `.env`:
-
-**OpenAI:**
-```bash
-TRACEA_RCA_BACKEND=openai
-OPENAI_API_KEY=sk-...
-```
-
-**Anthropic:**
-```bash
-TRACEA_RCA_BACKEND=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-```
-
-**Anthropic-compatible proxy (e.g., MiniMax):**
-```bash
-TRACEA_RCA_BACKEND=anthropic
-ANTHROPIC_API_KEY=your-key
-ANTHROPIC_BASE_URL=https://api.minimax.io/anthropic
-TRACEA_RCA_MODEL=MiniMax-M2.7
-```
-
-**Ollama (local, free):**
-```bash
-TRACEA_RCA_BACKEND=ollama
-TRACEA_RCA_BASE_URL=http://localhost:11434
-TRACEA_RCA_MODEL=llama3
-```
-
----
-
-## API
-
-| Endpoint | Description |
-|----------|-------------|
-| `GET /health` | Health check |
-| `GET /api/v1/sessions` | List sessions |
-| `GET /api/v1/sessions/{id}/events` | Session events |
-| `GET /api/v1/issues` | List issues |
-| `GET /api/v1/config/rules` | Read detection rules YAML |
-| `PUT /api/v1/config/rules` | Write detection rules YAML |
-| `GET /api/v1/config/alerts` | Read alerts YAML |
-| `PUT /api/v1/config/alerts` | Write alerts YAML |
-
-All API endpoints require `Authorization: Bearer {api_key}` (unless `TRACEA_DEV_MODE=1` is set).
-
----
-
-## Development
-
-```bash
-# Run backend tests
-pytest tests/
-
-# Run dashboard build
-cd dashboard && npm run build
-
-# Run SDK tests
-cd sdk-python && pytest
-
-# Run MCP tests
-cd tracea-mcp && pytest
-```
-
----
-
-## License
-
-MIT
+MIT — see [LICENSE](LICENSE) for details.
