@@ -1,6 +1,17 @@
+import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Activity, Bot, AlertCircle, Settings, Radio } from 'lucide-react'
+import { useUser } from '@/hooks/UserContext'
+import api from '@/lib/api'
+import {
+  LayoutDashboard,
+  Activity,
+  Bot,
+  AlertCircle,
+  Settings,
+  Radio,
+  Users,
+} from 'lucide-react'
 
 const navItems = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -12,11 +23,21 @@ const navItems = [
 ]
 
 export function Sidebar() {
+  const { selectedUser, setSelectedUser, users, setUsers } = useUser()
+
+  useEffect(() => {
+    api
+      .get<{ users: string[] }>('/api/v1/users')
+      .then((res) => setUsers(res.data.users))
+      .catch(() => {})
+  }, [setUsers])
+
   return (
     <aside className="w-60 bg-zinc-100 flex flex-col h-full">
       <div className="px-4 py-4 border-b border-zinc-200">
         <h1 className="text-lg font-bold text-zinc-900">tracea</h1>
       </div>
+
       <nav className="flex-1 py-2">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
@@ -36,6 +57,26 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* User picker */}
+      <div className="px-4 py-3 border-t border-zinc-200">
+        <label className="flex items-center gap-2 text-xs font-medium text-zinc-500 mb-1.5">
+          <Users className="h-3.5 w-3.5" />
+          Team member
+        </label>
+        <select
+          value={selectedUser}
+          onChange={(e) => setSelectedUser(e.target.value)}
+          className="w-full text-sm bg-white border border-zinc-300 rounded-md px-2 py-1.5 text-zinc-700 focus:outline-none focus:ring-1 focus:ring-accent"
+        >
+          <option value="">All members</option>
+          {users.map((u) => (
+            <option key={u} value={u}>
+              {u}
+            </option>
+          ))}
+        </select>
+      </div>
     </aside>
   )
 }

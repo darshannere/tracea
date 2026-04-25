@@ -35,13 +35,14 @@ import uuid
 from datetime import datetime, timezone
 
 SERVER_URL = os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
-API_KEY = os.environ.get("TRACEA_API_KEY", "dev-mode")
 AGENT_ID = os.environ.get("TRACEA_AGENT_ID", "kimi")
+USER_ID = os.environ.get("TRACEA_USER_ID", "")
 
 # In-memory store to correlate pre/post tool calls within a process.
 # Kimi runs PreToolUse and PostToolUse as separate subprocess calls,
 # so we use a temp file keyed by session_id + tool_name.
 _LAST_TCID_FILE = "/tmp/tracea-kimi-last-tcid"
+_START_TIME_FILE = "/tmp/tracea-kimi-start-time"
 
 
 def post_event(
@@ -62,6 +63,7 @@ def post_event(
             "event_id": str(uuid.uuid4()),
             "session_id": sid,
             "agent_id": AGENT_ID,
+            "user_id": USER_ID,
             "sequence": 0,
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "type": event_type,
@@ -83,7 +85,6 @@ def post_event(
         f"{SERVER_URL}/api/v1/events/mcp",
         data=json.dumps(payload).encode(),
         headers={
-            "Authorization": f"Bearer {API_KEY}",
             "Content-Type": "application/json",
         },
         method="POST",
@@ -99,10 +100,13 @@ def post_event(
         return 0
 
 
-def _persist_tcid(tcid: str) -> None:
+def _persist_tcid(tcid: str, start_time: float | None = None) -> None:
     try:
         with open(_LAST_TCID_FILE, "w") as f:
             f.write(tcid)
+        if start_time is not None:
+            with open(_START_TIME_FILE, "w") as f:
+                f.write(str(start_time))
     except Exception:
         pass
 
@@ -115,11 +119,20 @@ def _read_tcid() -> str | None:
         return None
 
 
-def _clear_tcid() -> None:
+def _read_start_time() -> float | None:
     try:
-        os.remove(_LAST_TCID_FILE)
+        with open(_START_TIME_FILE) as f:
+            return float(f.read().strip())
     except Exception:
-        pass
+        return None
+
+
+def _clear_tcid() -> None:
+    for f in (_LAST_TCID_FILE, _START_TIME_FILE):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
 
 
 def main() -> int:
@@ -149,24 +162,29 @@ def main() -> int:
 
     if hook_type == "pre":
         content = json.dumps(tool_input) if tool_input else None
-        _persist_tcid(tcid)
+        _persist_tcid(tcid, start_time=datetime.now(timezone.utc).timestamp())
         post_event("tool_call", content=content, tool_name=tool_name,
                    tool_call_id=tcid, session_id=session_id)
 
     elif hook_type == "post":
         content = json.dumps(tool_output) if tool_output else None
         stored_tcid = _read_tcid() or tcid
+        start_time = _read_start_time()
+        duration_ms = int((datetime.now(timezone.utc).timestamp() - start_time) * 1000) if start_time else 0
         _clear_tcid()
         post_event("tool_result", content=content, tool_name=tool_name,
-                   tool_call_id=stored_tcid, session_id=session_id)
+                   tool_call_id=stored_tcid, session_id=session_id,
+                   duration_ms=duration_ms)
 
     elif hook_type == "post_failure":
         content = json.dumps(tool_input) if tool_input else None
         stored_tcid = _read_tcid() or tcid
+        start_time = _read_start_time()
+        duration_ms = int((datetime.now(timezone.utc).timestamp() - start_time) * 1000) if start_time else 0
         _clear_tcid()
         post_event("tool_result", content=content, error=tool_error,
                    tool_name=tool_name, tool_call_id=stored_tcid,
-                   session_id=session_id)
+                   session_id=session_id, duration_ms=duration_ms)
 
     elif hook_type == "session_start":
         post_event("session_start", session_id=session_id)

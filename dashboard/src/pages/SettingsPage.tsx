@@ -5,7 +5,6 @@ import { Settings as SettingsIcon, Loader2 } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { YamlEditor } from '@/components/settings/YamlEditor'
-import { ApiKeyDisplay } from '@/components/settings/ApiKeyDisplay'
 import { RuleTemplates } from '@/components/settings/RuleTemplates'
 import { RulesHelpPanel } from '@/components/settings/RulesHelpPanel'
 import { AlertsHelpPanel } from '@/components/settings/AlertsHelpPanel'
@@ -166,8 +165,6 @@ export function SettingsPage() {
         <SettingsIcon className="h-5 w-5 text-zinc-500" />
         <h2 className="text-xl font-semibold">Settings</h2>
       </div>
-
-      <ApiKeyDisplay />
 
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)} className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between">

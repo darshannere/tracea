@@ -96,6 +96,7 @@ def _build_event(
         event_id=uuid4(),
         session_id=session_id,
         agent_id=ctx.get("agent_id", ""),
+        user_id=config.user_id if config else "",
         sequence=_get_next_sequence(session_id),
         timestamp=datetime.now(timezone.utc),
         type="chat.completion",

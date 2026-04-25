@@ -47,6 +47,15 @@ def _resolve_metadata(extra: dict[str, Any] | None = None) -> dict[str, Any]:
     return merged
 
 
+def _resolve_user_id() -> str:
+    """Return the configured user_id or empty string."""
+    try:
+        from tracea.config import get_config
+        return get_config().user_id
+    except Exception:
+        return ""
+
+
 def _build_event(
     event_type: str,
     content: str | None = None,
@@ -68,6 +77,7 @@ def _build_event(
         event_id=uuid4(),
         session_id=uuid5_session_id(_resolve_session_id()),
         agent_id=_resolve_agent_id(),
+        user_id=_resolve_user_id(),
         sequence=0,  # sequence is managed by buffer if needed
         timestamp=datetime.now(timezone.utc),
         type=event_type,  # type: ignore[arg-type]

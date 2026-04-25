@@ -1,9 +1,8 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePolling } from '@/hooks/usePolling'
-import { useAuth } from '@/hooks/useAuth'
+import { useUser } from '@/hooks/UserContext'
 import api from '@/lib/api'
-import { AuthErrorState } from '@/components/layout/AuthErrorState'
 import { StatCards } from '@/components/charts/StatCards'
 import {
   CostChart,
@@ -78,18 +77,21 @@ function formatDate(iso: string): string {
 }
 
 export function SessionsPage() {
-  const { hasKey } = useAuth()
   const navigate = useNavigate()
+  const { selectedUser } = useUser()
   const [sorting, setSorting] = useState<SortingState>([])
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const { data, error } = usePolling(async () => {
-    const res = await api.get<{ sessions: Session[]; total: number }>('/api/v1/sessions')
+    const params = new URLSearchParams()
+    if (selectedUser) params.append('user_id', selectedUser)
+    const res = await api.get<{ sessions: Session[]; total: number }>(`/api/v1/sessions?${params.toString()}`)
     return res.data
   })
 
   const { data: agentsData } = usePolling(async () => {
-    const res = await api.get<{ agents: AgentStat[] }>('/api/v1/agents')
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ agents: AgentStat[] }>(`/api/v1/agents${params}`)
     return res.data
   })
 
@@ -264,10 +266,6 @@ export function SessionsPage() {
     aggregatedMetrics.costSeries.length > 0 ||
     aggregatedMetrics.tokenSeries.length > 0 ||
     aggregatedMetrics.eventsSeries.length > 0
-
-  if (!hasKey) {
-    return <AuthErrorState />
-  }
 
   if (data === null) {
     return (

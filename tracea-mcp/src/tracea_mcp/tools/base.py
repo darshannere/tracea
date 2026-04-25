@@ -40,7 +40,7 @@ class BaseTool(ABC):
         raise NotImplementedError
 
     async def log_and_execute(self, args: dict, session_id: str, agent_id: str,
-                               sequence_fn, event_post_fn):
+                               sequence_fn, event_post_fn, user_id: str = ""):
         """Execute tool, build events, post to tracea, return MCP result."""
         start = time.monotonic()
 
@@ -50,6 +50,7 @@ class BaseTool(ABC):
             "event_id": self._make_uuid(),
             "session_id": session_id,
             "agent_id": agent_id,
+            "user_id": user_id,
             "sequence": seq,
             "timestamp": self._now(),
             "type": "tool_call",
@@ -70,6 +71,7 @@ class BaseTool(ABC):
             "event_id": self._make_uuid(),
             "session_id": session_id,
             "agent_id": agent_id,
+            "user_id": user_id,
             "sequence": seq2,
             "timestamp": self._now(),
             "type": "error" if result.error else "tool_result",

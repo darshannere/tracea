@@ -30,14 +30,14 @@
 
 interface TraceaConfig {
   serverUrl: string;
-  apiKey: string;
   agentId: string;
+  userId: string;
 }
 
 const CONFIG: TraceaConfig = {
   serverUrl: process.env.TRACEA_SERVER_URL || "http://localhost:8080",
-  apiKey: process.env.TRACEA_API_KEY || "dev-mode",
   agentId: process.env.TRACEA_AGENT_ID || "openclaw",
+  userId: process.env.TRACEA_USER_ID || "",
 };
 
 // In-flight turn tracking: sessionKey → turn state
@@ -70,7 +70,6 @@ async function postEvent(payload: {
     const resp = await fetch(`${CONFIG.serverUrl}/api/v1/events/mcp`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${CONFIG.apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify(payload),
@@ -93,6 +92,7 @@ function buildEvent(
     event_id: genId(),
     session_id: sessionKey,
     agent_id: agentId || CONFIG.agentId,
+    user_id: CONFIG.userId,
     sequence: 0,
     timestamp: nowIso(),
     type,

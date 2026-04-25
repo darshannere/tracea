@@ -23,6 +23,7 @@ class TracedEvent(BaseModel):
     event_id: str
     session_id: str
     agent_id: str
+    user_id: str = ""
     sequence: int = 0
     timestamp: datetime
     type: EventType

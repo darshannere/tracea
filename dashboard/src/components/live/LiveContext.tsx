@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import api from '@/lib/api'
+import { useUser } from '@/hooks/UserContext'
 
 export interface ToolEvent {
   id: string
@@ -56,6 +57,7 @@ interface LiveActions {
 const LiveContext = createContext<(LiveState & LiveActions) | null>(null)
 
 export function LiveProvider({ children }: { children: ReactNode }) {
+  const { selectedUser } = useUser()
   const [events, setEvents] = useState<ToolEvent[]>([])
   const [sessions, setSessions] = useState<LiveSession[]>([])
   const [activeSessionFilter, setSessionFilter] = useState<string | null>(null)
@@ -67,14 +69,15 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setIsLoading(true)
     try {
+      const userParam = selectedUser ? `&user_id=${encodeURIComponent(selectedUser)}` : ''
       const [eventsRes, sessionsRes, healthRes] = await Promise.all([
         api.get<ToolEvent[]>(
           activeSessionFilter
-            ? `/api/v1/observagent/events?session_id=${activeSessionFilter}&limit=500`
-            : '/api/v1/observagent/events?limit=200'
+            ? `/api/v1/observagent/events?session_id=${activeSessionFilter}${userParam}&limit=500`
+            : `/api/v1/observagent/events?limit=200${userParam}`
         ),
-        api.get<{ sessions: LiveSession[] }>('/api/v1/observagent/sessions'),
-        api.get('/api/v1/observagent/health'),
+        api.get<{ sessions: LiveSession[] }>(`/api/v1/observagent/sessions${userParam ? `?user_id=${encodeURIComponent(selectedUser)}` : ''}`),
+        api.get(`/api/v1/observagent/health${userParam ? `?user_id=${encodeURIComponent(selectedUser)}` : ''}`),
       ])
       setEvents(eventsRes.data)
       setSessions(sessionsRes.data.sessions)
@@ -84,7 +87,7 @@ export function LiveProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false)
     }
-  }, [activeSessionFilter])
+  }, [activeSessionFilter, selectedUser])
 
   useEffect(() => {
     refresh()

@@ -4,6 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, CartesianGrid,
 } from 'recharts'
 import { useLive } from './LiveContext'
+import { useUser } from '@/hooks/UserContext'
 import type { ToolEvent } from './LiveContext'
 import api from '@/lib/api'
 
@@ -49,6 +50,7 @@ function computeLatencyPercentiles(events: ToolEvent[]) {
 
 export function InsightsPanel() {
   const [activeTab, setActiveTab] = useState<Tab>('Cost')
+  const { selectedUser } = useUser()
   const { events, sessions } = useLive()
 
   const latestSessionId = sessions[0]?.session_id ?? null
@@ -60,20 +62,22 @@ export function InsightsPanel() {
   const [costAgentData, setCostAgentData] = useState<{ agent_type: string; cost_usd: number }[]>([])
   const [costAgentStatus, setCostAgentStatus] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle')
 
+  const userParam = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+
   useEffect(() => {
-    if (activeTab !== 'Cost' || hasFetchedCost.current) return
+    if (activeTab !== 'Cost') return
     hasFetchedCost.current = true
     setCostDailyStatus('loading')
     setCostAgentStatus('loading')
 
-    api.get('/api/v1/observagent/insights/cost-daily')
+    api.get(`/api/v1/observagent/insights/cost-daily${userParam}`)
       .then(r => { setCostDailyData(r.data); setCostDailyStatus('ok') })
       .catch(() => setCostDailyStatus('error'))
 
-    api.get('/api/v1/observagent/insights/cost-by-agent')
+    api.get(`/api/v1/observagent/insights/cost-by-agent${userParam}`)
       .then(r => { setCostAgentData(r.data); setCostAgentStatus('ok') })
       .catch(() => setCostAgentStatus('error'))
-  }, [activeTab])
+  }, [activeTab, selectedUser])
 
   // --- Activity tab ---
   const [activityData, setActivityData] = useState<{ bucket_ms: number; tool_calls: number }[]>([])
@@ -95,14 +99,14 @@ export function InsightsPanel() {
   useEffect(() => {
     const fetchStalled = () => {
       setStalledStatus('loading')
-      api.get('/api/v1/observagent/insights/stalled-agents')
+      api.get(`/api/v1/observagent/insights/stalled-agents${userParam}`)
         .then(r => { setStalledAgents(r.data); setStalledStatus('ok') })
         .catch(() => setStalledStatus('error'))
     }
     fetchStalled()
     const id = setInterval(fetchStalled, 30000)
     return () => clearInterval(id)
-  }, [])
+  }, [selectedUser])
 
   // Health tab polling
   useEffect(() => {
@@ -111,7 +115,10 @@ export function InsightsPanel() {
       setErrorRateStatus('loading')
       setLatencyStatus('loading')
 
-      api.get(`/api/v1/observagent/insights/error-rate?session_id=${latestSessionId}`)
+      const baseParams = new URLSearchParams({ session_id: latestSessionId })
+      if (selectedUser) baseParams.append('user_id', selectedUser)
+
+      api.get(`/api/v1/observagent/insights/error-rate?${baseParams.toString()}`)
         .then(r => {
           const transformed = r.data.map((d: { bucket_ms: number; errors: number; total: number }) => ({
             bucket_ms: d.bucket_ms,
@@ -122,14 +129,14 @@ export function InsightsPanel() {
         })
         .catch(() => setErrorRateStatus('error'))
 
-      api.get(`/api/v1/observagent/insights/latency-by-tool?session_id=${latestSessionId}`)
+      api.get(`/api/v1/observagent/insights/latency-by-tool?${baseParams.toString()}`)
         .then(r => { setLatencyData(r.data); setLatencyStatus('ok') })
         .catch(() => setLatencyStatus('error'))
     }
     fetchHealth()
     const id = setInterval(fetchHealth, 30000)
     return () => clearInterval(id)
-  }, [activeTab, latestSessionId])
+  }, [activeTab, latestSessionId, selectedUser])
 
   // Activity tab polling
   useEffect(() => {
@@ -137,18 +144,21 @@ export function InsightsPanel() {
     const fetchData = () => {
       setActivityStatus('loading')
       setTokensStatus('loading')
-      api.get(`/api/v1/observagent/insights/activity?session_id=${latestSessionId}`)
+      const baseParams = new URLSearchParams({ session_id: latestSessionId })
+      if (selectedUser) baseParams.append('user_id', selectedUser)
+
+      api.get(`/api/v1/observagent/insights/activity?${baseParams.toString()}`)
         .then(r => { setActivityData(r.data); setActivityStatus('ok') })
         .catch(() => setActivityStatus('error'))
 
-      api.get(`/api/v1/observagent/insights/tokens-over-time?session_id=${latestSessionId}`)
+      api.get(`/api/v1/observagent/insights/tokens-over-time?${baseParams.toString()}`)
         .then(r => { setTokensData(r.data); setTokensStatus('ok') })
         .catch(() => setTokensStatus('error'))
     }
     fetchData()
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
-  }, [activeTab, latestSessionId])
+  }, [activeTab, latestSessionId, selectedUser])
 
   const latency = useMemo(() => computeLatencyPercentiles(events), [events])
 
@@ -182,7 +192,7 @@ export function InsightsPanel() {
               ) : costDailyStatus === 'error' ? (
                 <Retry onClick={() => {
                   setCostDailyStatus('loading')
-                  api.get('/api/v1/observagent/insights/cost-daily')
+                  api.get(`/api/v1/observagent/insights/cost-daily${userParam}`)
                     .then(r => { setCostDailyData(r.data); setCostDailyStatus('ok') })
                     .catch(() => setCostDailyStatus('error'))
                 }} />
@@ -209,7 +219,7 @@ export function InsightsPanel() {
               ) : costAgentStatus === 'error' ? (
                 <Retry onClick={() => {
                   setCostAgentStatus('loading')
-                  api.get('/api/v1/observagent/insights/cost-by-agent')
+                  api.get(`/api/v1/observagent/insights/cost-by-agent${userParam}`)
                     .then(r => { setCostAgentData(r.data); setCostAgentStatus('ok') })
                     .catch(() => setCostAgentStatus('error'))
                 }} />
@@ -325,7 +335,7 @@ export function InsightsPanel() {
               ) : stalledStatus === 'error' ? (
                 <Retry onClick={() => {
                   setStalledStatus('loading')
-                  api.get('/api/v1/observagent/insights/stalled-agents')
+                  api.get(`/api/v1/observagent/insights/stalled-agents${userParam}`)
                     .then(r => { setStalledAgents(r.data); setStalledStatus('ok') })
                     .catch(() => setStalledStatus('error'))
                 }} />
@@ -363,7 +373,9 @@ export function InsightsPanel() {
               ) : errorRateStatus === 'error' ? (
                 <Retry onClick={() => {
                   setErrorRateStatus('loading')
-                  api.get(`/api/v1/observagent/insights/error-rate?session_id=${latestSessionId}`)
+                  const p = new URLSearchParams({ session_id: latestSessionId })
+                  if (selectedUser) p.append('user_id', selectedUser)
+                  api.get(`/api/v1/observagent/insights/error-rate?${p.toString()}`)
                     .then(r => {
                       const transformed = r.data.map((d: { bucket_ms: number; errors: number; total: number }) => ({
                         bucket_ms: d.bucket_ms,
@@ -399,7 +411,9 @@ export function InsightsPanel() {
               ) : latencyStatus === 'error' ? (
                 <Retry onClick={() => {
                   setLatencyStatus('loading')
-                  api.get(`/api/v1/observagent/insights/latency-by-tool?session_id=${latestSessionId}`)
+                  const p = new URLSearchParams({ session_id: latestSessionId })
+                  if (selectedUser) p.append('user_id', selectedUser)
+                  api.get(`/api/v1/observagent/insights/latency-by-tool?${p.toString()}`)
                     .then(r => { setLatencyData(r.data); setLatencyStatus('ok') })
                     .catch(() => setLatencyStatus('error'))
                 }} />

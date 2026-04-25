@@ -1,9 +1,8 @@
 """Config API — YAML config read/write for Settings page."""
 import os
 import tempfile
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from tracea.server.auth import bearer_auth
 
 router = APIRouter(prefix="/api/v1/config", tags=["config"])
 
@@ -13,7 +12,7 @@ class ConfigContent(BaseModel):
 
 
 def _read_yaml(path: str) -> str:
-    full = os.getenv("TRACEA_DATA_DIR", "/data")
+    full = os.getenv("TRACEA_DATA_DIR", "./data")
     file_path = os.path.join(full, path)
     if os.path.exists(file_path):
         with open(file_path) as f:
@@ -29,7 +28,7 @@ def _read_yaml(path: str) -> str:
 
 
 def _write_yaml(path: str, content: str) -> None:
-    full = os.getenv("TRACEA_DATA_DIR", "/data")
+    full = os.getenv("TRACEA_DATA_DIR", "./data")
     file_path = os.path.join(full, path)
     # Atomic write: temp file + rename
     fd, tmp = tempfile.mkstemp(dir=full, suffix=".yaml")
@@ -44,14 +43,14 @@ def _write_yaml(path: str, content: str) -> None:
 
 
 @router.get("/rules")
-async def get_rules(_api_key: str = Depends(bearer_auth)):
+async def get_rules():
     """Return raw YAML content of detection_rules.yaml."""
     content = _read_yaml("detection_rules.yaml")
     return {"content": content}
 
 
 @router.put("/rules")
-async def put_rules(body: ConfigContent, _api_key: str = Depends(bearer_auth)):
+async def put_rules(body: ConfigContent):
     """Write new detection_rules.yaml content and trigger hot-reload."""
     # Validate YAML first
     try:
@@ -74,14 +73,14 @@ async def put_rules(body: ConfigContent, _api_key: str = Depends(bearer_auth)):
 
 
 @router.get("/alerts")
-async def get_alerts(_api_key: str = Depends(bearer_auth)):
+async def get_alerts():
     """Return raw YAML content of alerts.yaml."""
     content = _read_yaml("alerts.yaml")
     return {"content": content}
 
 
 @router.put("/alerts")
-async def put_alerts(body: ConfigContent, _api_key: str = Depends(bearer_auth)):
+async def put_alerts(body: ConfigContent):
     """Write new alerts.yaml content and trigger hot-reload."""
     # Validate YAML first
     try:
@@ -104,7 +103,7 @@ async def put_alerts(body: ConfigContent, _api_key: str = Depends(bearer_auth)):
 
 
 @router.get("/rca")
-async def get_rca(_api_key: str = Depends(bearer_auth)):
+async def get_rca():
     """Return current RCA backend configuration."""
     return {
         "backend": os.getenv("TRACEA_RCA_BACKEND", "disabled"),

@@ -13,7 +13,7 @@ _stop_watching: asyncio.Event | None = None
 async def reload_alerts(path: str | None = None) -> None:
     """Reload alerts config atomically."""
     global _alerts_config
-    alert_path = path or os.getenv("TRACEA_ALERTS_PATH", "/data/alerts.yaml")
+    alert_path = path or os.getenv("TRACEA_ALERTS_PATH", "./data/alerts.yaml")
     try:
         config = load_alerts_config(alert_path)
         async with _config_lock:
@@ -30,7 +30,7 @@ async def get_alerts_config() -> AlertsConfig | None:
 
 async def _watch_loop(path: str | None = None) -> None:
     global _stop_watching
-    alert_path = path or os.getenv("TRACEA_ALERTS_PATH", "/data/alerts.yaml")
+    alert_path = path or os.getenv("TRACEA_ALERTS_PATH", "./data/alerts.yaml")
     try:
         await reload_alerts(alert_path)
         async for changes in awatch(alert_path):

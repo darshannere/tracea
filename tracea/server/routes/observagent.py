@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, Query, HTTPException
-from tracea.server.auth import bearer_auth
+from fastapi import APIRouter, Query, HTTPException
 from tracea.server.db import get_db
 from typing import Optional
 import json
@@ -16,8 +15,8 @@ def _ts_to_ms_expr(col: str = "timestamp") -> str:
 @router.get("/events")
 async def list_events(
     session_id: Optional[str] = None,
+    user_id: Optional[str] = None,
     limit: int = Query(200, ge=1, le=1000),
-    _api_key: str = Depends(bearer_auth)
 ):
     """Return tool events in ObservAgent-compatible format.
 
@@ -27,9 +26,12 @@ async def list_events(
     db = await anext(get_db())
 
     session_filter = "AND tc.session_id = ?" if session_id else ""
+    user_filter = "AND tc.user_id = ?" if user_id else ""
     params: list = [limit]
     if session_id:
         params.insert(0, session_id)
+    if user_id:
+        params.insert(0, user_id)
 
     # Fetch tool_call rows joined with their matching tool_result
     sql = f"""
@@ -50,6 +52,7 @@ async def list_events(
         WHERE type = 'tool_call'
           AND tool_name IS NOT NULL
           {session_filter}
+          {user_filter}
     ),
     tool_results AS (
         SELECT
@@ -87,6 +90,7 @@ async def list_events(
     events = [dict(r) for r in await rows.fetchall()]
 
     # Also include standalone error events (no matching tool_call) for the same session
+    error_user_filter = "AND user_id = ?" if user_id else ""
     error_sql = f"""
     SELECT
         event_id             AS id,
@@ -105,12 +109,15 @@ async def list_events(
     WHERE type = 'error'
       AND tool_name IS NOT NULL
       {session_filter}
+      {error_user_filter}
     ORDER BY timestamp DESC
     LIMIT ?
     """
     error_params = []
     if session_id:
         error_params.append(session_id)
+    if user_id:
+        error_params.append(user_id)
     error_params.append(limit)
 
     error_rows = await db.execute(error_sql, error_params)
@@ -128,10 +135,15 @@ async def list_events(
 
 
 @router.get("/sessions")
-async def list_sessions_for_tree(_api_key: str = Depends(bearer_auth)):
+async def list_sessions_for_tree(user_id: Optional[str] = None):
     """Return sessions with agent info for the left-hand tree panel."""
     db = await anext(get_db())
-    rows = await db.execute("""
+    where = "WHERE 1=1"
+    params = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
         SELECT
             session_id,
             agent_id,
@@ -144,47 +156,57 @@ async def list_sessions_for_tree(_api_key: str = Depends(bearer_auth)):
             total_cost,
             total_tokens
         FROM sessions
+        {where}
         ORDER BY last_event_at DESC
         LIMIT 200
-    """)
+    """, params)
     sessions = [dict(r) for r in await rows.fetchall()]
     return {"sessions": sessions}
 
 
 @router.get("/insights/cost-daily")
-async def cost_daily(_api_key: str = Depends(bearer_auth)):
+async def cost_daily(user_id: Optional[str] = None):
     db = await anext(get_db())
-    rows = await db.execute("""
+    where = "WHERE started_at >= date('now', '-6 days')"
+    params = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
         SELECT
             date(started_at) AS day,
             ROUND(SUM(COALESCE(total_cost, 0)), 6) AS cost_usd
         FROM sessions
-        WHERE started_at >= date('now', '-6 days')
+        {where}
         GROUP BY date(started_at)
         ORDER BY day ASC
-    """)
+    """, params)
     return [dict(r) for r in await rows.fetchall()]
 
 
 @router.get("/insights/cost-by-agent")
-async def cost_by_agent(_api_key: str = Depends(bearer_auth)):
+async def cost_by_agent(user_id: Optional[str] = None):
     db = await anext(get_db())
-    rows = await db.execute("""
+    where = "WHERE agent_id IS NOT NULL AND agent_id != ''"
+    params = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
         SELECT
             COALESCE(NULLIF(agent_id, ''), 'solo') AS agent_type,
             ROUND(SUM(COALESCE(total_cost, 0)), 6) AS cost_usd
         FROM sessions
-        WHERE agent_id IS NOT NULL AND agent_id != ''
+        {where}
         GROUP BY agent_id
         ORDER BY cost_usd DESC
-    """)
+    """, params)
     return [dict(r) for r in await rows.fetchall()]
 
 
 @router.get("/insights/activity")
 async def activity_by_session(
     session_id: str = Query(...),
-    _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
     rows = await db.execute("""
@@ -203,7 +225,6 @@ async def activity_by_session(
 @router.get("/insights/tokens-over-time")
 async def tokens_over_time(
     session_id: str = Query(...),
-    _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
     rows = await db.execute("""
@@ -223,7 +244,6 @@ async def tokens_over_time(
 @router.get("/insights/error-rate")
 async def error_rate(
     session_id: str = Query(default=""),
-    _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
     # 5-minute buckets
@@ -246,7 +266,6 @@ async def error_rate(
 @router.get("/insights/latency-by-tool")
 async def latency_by_tool(
     session_id: str = Query(default=""),
-    _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
     params = [session_id, session_id]
@@ -296,31 +315,31 @@ async def latency_by_tool(
 
 
 @router.get("/insights/stalled-agents")
-async def stalled_agents(_api_key: str = Depends(bearer_auth)):
+async def stalled_agents(user_id: Optional[str] = None):
     """Return sessions (treated as agents) that have not had an event in > 10 minutes
     and have not ended yet."""
     db = await anext(get_db())
-    now_ms = int(time.time() * 1000)
-    threshold_ms = now_ms - 10 * 60 * 1000
-
-    rows = await db.execute("""
+    where = "WHERE ended_at IS NULL AND last_event_at IS NOT NULL AND CAST((julianday('now') - julianday(last_event_at)) * 86400000 AS INTEGER) > 600000"
+    params = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
         SELECT
             session_id AS agent_id,
             COALESCE(NULLIF(agent_id, ''), 'solo') AS agent_type,
             CAST((julianday(last_event_at) - 2440587.5) * 86400000 AS INTEGER) AS last_activity_ts,
             CAST((julianday('now') - julianday(last_event_at)) * 86400 AS INTEGER) AS idle_seconds
         FROM sessions
-        WHERE ended_at IS NULL
-          AND last_event_at IS NOT NULL
-          AND CAST((julianday('now') - julianday(last_event_at)) * 86400000 AS INTEGER) > 600000
+        {where}
         ORDER BY last_event_at ASC
         LIMIT 50
-    """)
+    """, params)
     return [dict(r) for r in await rows.fetchall()]
 
 
 @router.get("/health")
-async def health_snapshot(_api_key: str = Depends(bearer_auth)):
+async def health_snapshot():
     db = await anext(get_db())
 
     last_ts_row = await db.execute(

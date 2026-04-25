@@ -1,7 +1,6 @@
 import base64
 import json
-from fastapi import APIRouter, Depends, Query, HTTPException
-from tracea.server.auth import bearer_auth
+from fastapi import APIRouter, Query, HTTPException
 from tracea.server.db import get_db
 from typing import Optional
 
@@ -24,7 +23,7 @@ async def list_sessions(
     limit: int = Query(50, ge=1, le=200),
     cursor: Optional[str] = None,
     agent_id: Optional[str] = None,
-    _api_key: str = Depends(bearer_auth)
+    user_id: Optional[str] = None,
 ):
     db = await anext(get_db())
 
@@ -34,6 +33,9 @@ async def list_sessions(
     if agent_id:
         where_parts.append("agent_id = ?")
         params.append(agent_id)
+    if user_id:
+        where_parts.append("user_id = ?")
+        params.append(user_id)
 
     if cursor:
         data = _decode_cursor(cursor)
@@ -51,8 +53,15 @@ async def list_sessions(
     sessions = sessions[:limit] if has_more else sessions
     next_cursor = encode_cursor(sessions[-1]["started_at"], sessions[-1]["session_id"]) if has_more and sessions else None
 
-    count_where = "WHERE agent_id = ?" if agent_id else ""
-    count_params = [agent_id] if agent_id else []
+    count_parts = []
+    count_params = []
+    if agent_id:
+        count_parts.append("agent_id = ?")
+        count_params.append(agent_id)
+    if user_id:
+        count_parts.append("user_id = ?")
+        count_params.append(user_id)
+    count_where = f"WHERE {' AND '.join(count_parts)}" if count_parts else ""
     total_result = await db.execute(f"SELECT COUNT(*) FROM sessions {count_where}", count_params)
     total = (await total_result.fetchone())[0]
 
@@ -63,7 +72,6 @@ async def list_sessions(
 async def get_session_events(
     session_id: str,
     limit: int = Query(500, ge=1, le=5000),
-    _api_key: str = Depends(bearer_auth)
 ):
     db = await anext(get_db())
     rows = await db.execute(
@@ -78,7 +86,7 @@ async def get_session_events(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, _api_key: str = Depends(bearer_auth)):
+async def delete_session(session_id: str):
     db = await anext(get_db())
     await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (session_id,))
     await db.execute("DELETE FROM issues WHERE session_id = ?", (session_id,))

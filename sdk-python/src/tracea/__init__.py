@@ -69,6 +69,7 @@ def init(
     api_key: str | None = None,
     server_url: str | None = None,
     base_url: str | None = None,
+    user_id: str | None = None,
     metadata: dict | None = None,
     tags: list[str] | None = None,
 ):
@@ -83,12 +84,13 @@ def init(
                     or "http://localhost:8080".
         base_url: Base URL for LLM API calls (for Azure OpenAI, proxies, etc.).
                   Defaults to TRACEA_BASE_URL env var or server_url.
+        user_id: Team member identifier for multi-user dashboards.
+                 Defaults to TRACEA_USER_ID env var.
         metadata: Global metadata applied to all events.
         tags: Global tags applied to all events.
 
     Raises:
         RuntimeError: If called more than once.
-        ValueError: If api_key is not set via param or env var.
     """
     # Import here to avoid circular deps
     from tracea.config import init as _init
@@ -96,6 +98,7 @@ def init(
         api_key=api_key,
         server_url=server_url,
         base_url=base_url,
+        user_id=user_id,
         metadata=metadata,
         tags=tags,
     )

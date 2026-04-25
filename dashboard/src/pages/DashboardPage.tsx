@@ -1,9 +1,8 @@
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { usePolling } from '@/hooks/usePolling'
-import { useAuth } from '@/hooks/useAuth'
+import { useUser } from '@/hooks/UserContext'
 import api from '@/lib/api'
-import { AuthErrorState } from '@/components/layout/AuthErrorState'
 import { StatCards } from '@/components/charts/StatCards'
 import {
   CostChart,
@@ -41,21 +40,24 @@ interface Issue {
 
 
 export function DashboardPage() {
-  const { hasKey } = useAuth()
   const navigate = useNavigate()
+  const { selectedUser } = useUser()
 
   const { data: sessionsData } = usePolling(async () => {
-    const res = await api.get<{ sessions: Session[]; total: number }>('/api/v1/sessions')
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ sessions: Session[]; total: number }>(`/api/v1/sessions${params}`)
     return res.data
   })
 
   const { data: agentsData } = usePolling(async () => {
-    const res = await api.get<{ agents: AgentStat[] }>('/api/v1/agents')
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ agents: AgentStat[] }>(`/api/v1/agents${params}`)
     return res.data
   })
 
   const { data: issuesData } = usePolling(async () => {
-    const res = await api.get<{ issues: Issue[] }>('/api/v1/issues')
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ issues: Issue[] }>(`/api/v1/issues${params}`)
     return res.data
   })
 
@@ -103,8 +105,6 @@ export function DashboardPage() {
     charts.costSeries.length > 0 ||
     charts.tokenSeries.length > 0 ||
     charts.eventsSeries.length > 0
-
-  if (!hasKey) return <AuthErrorState />
 
   if (sessionsData === null) {
     return (

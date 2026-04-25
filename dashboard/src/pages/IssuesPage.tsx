@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 
 import { usePolling } from '@/hooks/usePolling'
+import { useUser } from '@/hooks/UserContext'
 import api from '@/lib/api'
 import * as Collapsible from '@radix-ui/react-collapsible'
 import { AlertCircle, ChevronDown, CheckCircle2, XCircle, Minus, Clock, Shield, Hourglass, Bot } from 'lucide-react'
@@ -154,15 +155,19 @@ function IssueCard({ issue, allAgentIds }: IssueCardProps) {
 }
 
 export function IssuesPage() {
+  const { selectedUser } = useUser()
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
 
   const { data, error } = usePolling(async () => {
-    const res = await api.get<{ issues: Issue[] }>('/api/v1/issues')
+    const params = new URLSearchParams()
+    if (selectedUser) params.append('user_id', selectedUser)
+    const res = await api.get<{ issues: Issue[] }>(`/api/v1/issues?${params.toString()}`)
     return res.data
   })
 
   const { data: agentsData } = usePolling(async () => {
-    const res = await api.get<{ agents: AgentStat[] }>('/api/v1/agents')
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ agents: AgentStat[] }>(`/api/v1/agents${params}`)
     return res.data
   })
 

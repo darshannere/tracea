@@ -8,6 +8,7 @@ class TraceaConfig:
     api_key: str
     server_url: str
     base_url: str  # TRACEA_BASE_URL — defaults to server_url for proxy support
+    user_id: str = ""  # Team member identifier for multi-user dashboards
     metadata: dict = field(default_factory=dict)  # PYS-10: init-level metadata
     tags: list[str] = field(default_factory=list)  # PYS-10: init-level tags
     _initialized: bool = field(default=False, repr=False)
@@ -18,6 +19,7 @@ def init(
     api_key: str | None = None,
     server_url: str | None = None,
     base_url: str | None = None,
+    user_id: str | None = None,
     metadata: dict | None = None,
     tags: list[str] | None = None,
 ) -> TraceaConfig:
@@ -28,12 +30,11 @@ def init(
         raise RuntimeError("tracea.init() already called")
 
     # Env vars are primary; params override if provided
-    resolved_api_key = api_key or os.environ.get("TRACEA_API_KEY")
-    if not resolved_api_key:
-        raise ValueError("TRACEA_API_KEY must be set via param or env var")
+    resolved_api_key = api_key or os.environ.get("TRACEA_API_KEY", "")
 
     resolved_server_url = server_url or os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
     resolved_base_url = base_url or os.environ.get("TRACEA_BASE_URL", resolved_server_url)
+    resolved_user_id = user_id or os.environ.get("TRACEA_USER_ID", "")
     resolved_metadata = metadata or {}
     resolved_tags = tags or []
 
@@ -41,6 +42,7 @@ def init(
         api_key=resolved_api_key,
         server_url=resolved_server_url,
         base_url=resolved_base_url,
+        user_id=resolved_user_id,
         metadata=resolved_metadata,
         tags=resolved_tags,
     )
