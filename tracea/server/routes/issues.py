@@ -1,7 +1,6 @@
 import base64
 import json
-from fastapi import APIRouter, Depends, Query, HTTPException
-from tracea.server.auth import bearer_auth
+from fastapi import APIRouter, Query, HTTPException
 from tracea.server.db import get_db
 from typing import Optional
 
@@ -21,7 +20,7 @@ async def list_issues(
     cursor: Optional[str] = None,
     session_id: Optional[str] = None,
     agent_id: Optional[str] = None,
-    _api_key: str = Depends(bearer_auth)
+    user_id: Optional[str] = None,
 ):
     db = await anext(get_db())
     if cursor:
@@ -46,6 +45,9 @@ async def list_issues(
     if agent_id:
         where_parts.append("s.agent_id = ?")
         params.append(agent_id)
+    if user_id:
+        where_parts.append("s.user_id = ?")
+        params.append(user_id)
     if cursor:
         where_parts.append("(i.detected_at, i.issue_id) < (?, ?)")
         params.extend([detected_before, issue_before])

@@ -1,14 +1,19 @@
-from fastapi import APIRouter, Depends
-from tracea.server.auth import bearer_auth
+from fastapi import APIRouter, Query
 from tracea.server.db import get_db
+from typing import Optional
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
 
 @router.get("/agents")
-async def list_agents(_api_key: str = Depends(bearer_auth)):
+async def list_agents(user_id: Optional[str] = None):
     db = await anext(get_db())
-    rows = await db.execute("""
+    where_clause = "WHERE agent_id IS NOT NULL AND agent_id != ''"
+    params = []
+    if user_id:
+        where_clause += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
         SELECT
             agent_id,
             COUNT(*)                                                     AS session_count,
@@ -19,9 +24,23 @@ async def list_agents(_api_key: str = Depends(bearer_auth)):
              WHERE s2.agent_id = sessions.agent_id
              ORDER BY s2.last_event_at DESC LIMIT 1)                    AS platform
         FROM sessions
-        WHERE agent_id IS NOT NULL AND agent_id != ''
+        {where_clause}
         GROUP BY agent_id
         ORDER BY last_active DESC
-    """)
+    """, params)
     agents = await rows.fetchall()
     return {"agents": [dict(a) for a in agents]}
+
+
+@router.get("/users")
+async def list_users():
+    """Return distinct user_ids for the team picker."""
+    db = await anext(get_db())
+    rows = await db.execute("""
+        SELECT DISTINCT user_id
+        FROM sessions
+        WHERE user_id IS NOT NULL AND user_id != ''
+        ORDER BY user_id ASC
+    """)
+    users = [row["user_id"] for row in await rows.fetchall()]
+    return {"users": users}

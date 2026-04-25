@@ -33,6 +33,5 @@ EXPOSE 8080
 VOLUME ["/data"]
 
 ENV TRACEA_DB_PATH=/data/tracea.db
-ENV TRACEA_API_KEY_FILE=/data/api_key.txt
 
 ENTRYPOINT ["/app/entrypoint.sh"]

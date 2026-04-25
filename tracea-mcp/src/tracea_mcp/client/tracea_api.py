@@ -8,16 +8,20 @@ from typing import Optional
 class TraceaAPIClient:
     """Posts events to the tracea server."""
 
-    def __init__(self, server_url: str, api_key: str):
+    def __init__(self, server_url: str, api_key: str, user_id: str = ""):
         self.server_url = server_url.rstrip("/")
         self.api_key = api_key
+        self.user_id = user_id
         self._client: Optional[httpx.AsyncClient] = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
+            headers = {}
+            if self.api_key:
+                headers["Authorization"] = f"Bearer {self.api_key}"
             self._client = httpx.AsyncClient(
                 base_url=self.server_url,
-                headers={"Authorization": f"Bearer {self.api_key}"},
+                headers=headers,
                 timeout=10.0,
             )
         return self._client
@@ -56,7 +60,8 @@ def get_client() -> TraceaAPIClient:
     if _client is None:
         api_key = os.environ.get("TRACEA_API_KEY", "")
         server_url = os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
-        _client = TraceaAPIClient(server_url, api_key)
+        user_id = os.environ.get("TRACEA_USER_ID", "")
+        _client = TraceaAPIClient(server_url, api_key, user_id)
     return _client
 
 

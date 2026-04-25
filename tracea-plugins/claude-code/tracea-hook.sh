@@ -24,8 +24,8 @@ set -euo pipefail
 
 HOOK_TYPE="${1:-}"
 SERVER_URL="${TRACEA_SERVER_URL:-http://localhost:8080}"
-API_KEY="${TRACEA_API_KEY:-dev-mode}"
 AGENT_ID="${TRACEA_AGENT_ID:-claude-code}"
+USER_ID="${TRACEA_USER_ID:-}"
 
 # Stable session ID for this Claude process (hostname + pid)
 SESSION_ID="${TRACEA_SESSION_ID:-$(python3 -c "import uuid; print(uuid.uuid5(uuid.NAMESPACE_DNS, '\$(hostname)-\$$'))")}"
@@ -49,6 +49,7 @@ tracea_post_event() {
     --arg eid "$event_id" \
     --arg sid "$SESSION_ID" \
     --arg aid "$AGENT_ID" \
+    --arg uid "$USER_ID" \
     --arg tid "$tool_call_id" \
     --arg tn "${CLAUDE_TOOL_NAME:-}" \
     --arg content "$content" \
@@ -60,6 +61,7 @@ tracea_post_event() {
         event_id: $eid,
         session_id: $sid,
         agent_id: $aid,
+        user_id: $uid,
         sequence: 0,
         timestamp: now|strftime("%Y-%m-%dT%H:%M:%SZ"),
         type: $et,
@@ -80,7 +82,6 @@ tracea_post_event() {
   local http_code
   http_code=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST "${SERVER_URL}/api/v1/events/mcp" \
-    -H "Authorization: Bearer ${API_KEY}" \
     -H "Content-Type: application/json" \
     -d "$payload" 2>/dev/null || echo "000")
 

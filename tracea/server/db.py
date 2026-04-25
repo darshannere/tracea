@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 import fcntl
 from tracea.server.models import TracedEvent
 
-DB_PATH = os.getenv("TRACEA_DB_PATH", "/data/tracea.db")
+DB_PATH = os.getenv("TRACEA_DB_PATH", "./data/tracea.db")
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 _db: aiosqlite.Connection | None = None
@@ -29,7 +29,7 @@ def check_sqlite_version() -> None:
     print(f"[tracea] SQLite version: {version}")
 
 
-def check_posix_locking(data_dir: str = "/data") -> bool:
+def check_posix_locking(data_dir: str = "./data") -> bool:
     """Test if /data supports POSIX advisory locking. Warn if NFS/EFS detected."""
     lock_file = Path(data_dir) / ".tracea_lock_test"
     try:
@@ -39,7 +39,7 @@ def check_posix_locking(data_dir: str = "/data") -> bool:
             lock_file.unlink()
         return True
     except (IOError, OSError):
-        print("[tracea] WARNING: /data does not support POSIX advisory locking.")
+        print(f"[tracea] WARNING: {data_dir} does not support POSIX advisory locking.")
         print("[tracea] WARNING: This may indicate NFS/EFS. SQLite WAL can corrupt on network filesystems.")
         return False
 
@@ -166,6 +166,7 @@ async def enqueue_events(events: list[TracedEvent]) -> None:
             str(event.event_id),
             str(event.session_id),
             event.agent_id,
+            event.user_id or "",
             event.sequence,
             event.timestamp.isoformat(),
             "1",  # schema_version
@@ -217,11 +218,11 @@ async def flush_events() -> int:
         try:
             await _db.executemany(
                 """INSERT OR REPLACE INTO events
-                (event_id, session_id, agent_id, sequence, timestamp, schema_version,
+                (event_id, session_id, agent_id, user_id, sequence, timestamp, schema_version,
                  type, provider, model, role, content, tool_call_id, tool_name,
                  status_code, error, duration_ms, input_tokens, output_tokens,
                  total_tokens, cost_usd, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 batch
             )
 
@@ -233,11 +234,12 @@ async def flush_events() -> int:
                 await _db.execute(
                     """
                     INSERT INTO sessions
-                        (session_id, agent_id, platform, started_at, ended_at, last_event_at,
+                        (session_id, agent_id, user_id, platform, started_at, ended_at, last_event_at,
                          duration_ms, event_count, total_cost, total_tokens)
                     SELECT
                         session_id,
                         MAX(agent_id),
+                        MAX(CASE WHEN user_id IS NOT NULL AND user_id != '' THEN user_id END),
                         COALESCE(
                             MAX(CASE WHEN json_extract(metadata, '$.integration') IS NOT NULL
                                      THEN json_extract(metadata, '$.integration') END),
@@ -260,6 +262,7 @@ async def flush_events() -> int:
                     GROUP BY session_id
                     ON CONFLICT(session_id) DO UPDATE SET
                         agent_id      = excluded.agent_id,
+                        user_id       = COALESCE(NULLIF(excluded.user_id, ''), sessions.user_id),
                         platform      = excluded.platform,
                         ended_at      = excluded.ended_at,
                         last_event_at = excluded.last_event_at,

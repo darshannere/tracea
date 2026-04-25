@@ -24,6 +24,7 @@ class TracedEvent:
     event_id: UUID
     session_id: UUID
     agent_id: str
+    user_id: str = ""
     sequence: int = 0
     timestamp: datetime = field(default_factory=datetime.utcnow)
     type: EventType = "chat.completion"
@@ -45,6 +46,7 @@ class TracedEvent:
             "event_id": str(self.event_id),
             "session_id": str(self.session_id),
             "agent_id": self.agent_id,
+            "user_id": self.user_id,
             "sequence": self.sequence,
             "timestamp": self.timestamp.isoformat(),
             "type": self.type,

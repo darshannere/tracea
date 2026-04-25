@@ -32,7 +32,7 @@ async def get_rules() -> list[dict]:
 async def _watch_loop(path: str | None = None) -> None:
     """Internal watch loop. Exits when _stop_watching is set."""
     global _stop_watching
-    rule_path = path or os.getenv("TRACEA_RULES_PATH", "/data/detection_rules.yaml")
+    rule_path = path or os.getenv("TRACEA_RULES_PATH", "./data/detection_rules.yaml")
     try:
         await reload_rules(rule_path)
         async for changes in awatch(rule_path):

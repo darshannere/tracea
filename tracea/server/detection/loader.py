@@ -29,7 +29,7 @@ class RulesLoader:
     """Loads and validates detection rules from YAML. Uses ruamel.yaml (never yaml.load)."""
 
     def __init__(self, path: str | None = None):
-        self.path = path or os.getenv("TRACEA_RULES_PATH", "/data/detection_rules.yaml")
+        self.path = path or os.getenv("TRACEA_RULES_PATH", "./data/detection_rules.yaml")
         self._yaml = ruamel.yaml.YAML()
         self._yaml.preserve_quotes = True
 

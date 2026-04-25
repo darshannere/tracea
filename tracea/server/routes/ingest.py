@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from tracea.server.models import EventBatch
-from tracea.server.auth import bearer_auth
 from tracea.server.db import enqueue_events, flush_events
 import asyncio
 from tracea.server.detection.engine import run_detection
@@ -13,7 +12,6 @@ _MAX_BATCH_SIZE = 1000
 @router.post("/events")
 async def ingest_events(
     batch: EventBatch,
-    _api_key: str = Depends(bearer_auth)
 ) -> dict:
     if len(batch.events) > _MAX_BATCH_SIZE:
         raise HTTPException(
@@ -32,7 +30,6 @@ async def ingest_events(
 @router.post("/events/mcp")
 async def ingest_mcp_events(
     batch: EventBatch,
-    _api_key: str = Depends(bearer_auth)
 ) -> dict:
     """Ingest events from tracea-mcp (Claude Code / OpenClaw integration).
 

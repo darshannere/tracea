@@ -1,8 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { usePolling } from '@/hooks/usePolling'
-import { useAuth } from '@/hooks/useAuth'
+import { useUser } from '@/hooks/UserContext'
 import api from '@/lib/api'
-import { AuthErrorState } from '@/components/layout/AuthErrorState'
 import { AgentStat, agentColor, formatPlatform } from '@/components/agents/AgentBar'
 import { Bot, AlertTriangle, DollarSign, Clock, Activity, ExternalLink } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -25,11 +24,12 @@ function formatCost(cost: number): string {
 }
 
 export function AgentsPage() {
-  const { hasKey } = useAuth()
   const navigate = useNavigate()
+  const { selectedUser } = useUser()
 
   const { data: agentsData } = usePolling(async () => {
-    const res = await api.get<{ agents: AgentStat[] }>('/api/v1/agents')
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ agents: AgentStat[] }>(`/api/v1/agents${params}`)
     return res.data
   })
 
@@ -39,8 +39,6 @@ export function AgentsPage() {
   const totalCost = agents.reduce((sum, a) => sum + a.total_cost, 0)
   const totalSessions = agents.reduce((sum, a) => sum + a.session_count, 0)
   const totalErrors = agents.reduce((sum, a) => sum + a.error_session_count, 0)
-
-  if (!hasKey) return <AuthErrorState />
 
   if (agentsData === null) {
     return (

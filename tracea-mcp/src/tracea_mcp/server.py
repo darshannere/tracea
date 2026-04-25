@@ -20,6 +20,7 @@ class MCPServer:
         self.transport = StdioTransport()
         self.registry = ToolRegistry()
         self.agent_id = agent_id
+        self.user_id = os.environ.get("TRACEA_USER_ID", "")
         self.session = create_session(agent_id)
         self.running = True
 
@@ -45,6 +46,7 @@ class MCPServer:
                     "event_id": str(uuid.uuid4()),
                     "session_id": self.session.session_id,
                     "agent_id": self.agent_id,
+                    "user_id": self.user_id,
                     "sequence": seq,
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     "type": "session_end",
@@ -80,6 +82,7 @@ class MCPServer:
                     "event_id": str(uuid.uuid4()),
                     "session_id": self.session.session_id,
                     "agent_id": self.agent_id,
+                    "user_id": self.user_id,
                     "sequence": next_sequence_for(self.session.session_id),
                     "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                     "type": "session_start",
@@ -107,6 +110,7 @@ class MCPServer:
                         self.agent_id,
                         lambda: next_sequence_for(self.session.session_id),
                         self.post_events,
+                        self.user_id,
                     )
                     self.transport.write_response(msg_id, result)
                 except Exception as e:
@@ -151,7 +155,6 @@ class MCPServer:
 
 def main():
     parser = argparse.ArgumentParser(description="tracea-mcp: Agent observability MCP server")
-    parser.add_argument("--api-key", help="tracea API key (or set TRACEA_API_KEY env var)")
     parser.add_argument("--server-url", help="tracea server URL (or set TRACEA_SERVER_URL env var)")
     parser.add_argument(
         "--agent-id",
@@ -160,8 +163,6 @@ def main():
     )
     args = parser.parse_args()
 
-    if args.api_key:
-        os.environ["TRACEA_API_KEY"] = args.api_key
     if args.server_url:
         os.environ["TRACEA_SERVER_URL"] = args.server_url
 

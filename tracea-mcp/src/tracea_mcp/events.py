@@ -20,10 +20,11 @@ class TracedEvent:
     event_id: str
     session_id: str
     agent_id: str
-    sequence: int
-    timestamp: str
-    type: str  # "tool_call", "tool_result", "error"
-    provider: str  # "claude-code" or "openclaw"
+    user_id: str = ""
+    sequence: int = 0
+    timestamp: str = ""
+    type: str = ""  # "tool_call", "tool_result", "error"
+    provider: str = ""  # "claude-code" or "openclaw"
     model: str = ""
     tool_name: Optional[str] = None
     content: Optional[str] = None
@@ -54,6 +55,7 @@ def build_tool_call_event(
     tool_name: str,
     tool_input: dict,
     duration_ms: int = 0,
+    user_id: str = "",
     integration: str = "tracea-mcp",
 ) -> TracedEvent:
     """Build a tool_call event."""
@@ -61,6 +63,7 @@ def build_tool_call_event(
         event_id=str(uuid.uuid4()),
         session_id=session_id,
         agent_id=agent_id,
+        user_id=user_id,
         sequence=sequence,
         timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         type="tool_call",
@@ -81,6 +84,7 @@ def build_tool_result_event(
     duration_ms: int = 0,
     error: Optional[str] = None,
     status_code: int = 0,
+    user_id: str = "",
     integration: str = "tracea-mcp",
 ) -> TracedEvent:
     """Build a tool_result or error event."""
@@ -88,6 +92,7 @@ def build_tool_result_event(
         event_id=str(uuid.uuid4()),
         session_id=session_id,
         agent_id=agent_id,
+        user_id=user_id,
         sequence=sequence,
         timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         type="error" if error else "tool_result",
@@ -105,6 +110,7 @@ def build_session_end_event(
     session_id: str,
     agent_id: str,
     sequence: int,
+    user_id: str = "",
     integration: str = "tracea-mcp",
 ) -> TracedEvent:
     """Build a session_end event."""
@@ -112,6 +118,7 @@ def build_session_end_event(
         event_id=str(uuid.uuid4()),
         session_id=session_id,
         agent_id=agent_id,
+        user_id=user_id,
         sequence=sequence,
         timestamp=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         type="session_end",
