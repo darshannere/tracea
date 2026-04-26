@@ -135,17 +135,17 @@ def load_backend(config: RCABackendConfig) -> RCABackend:
             model=config.model or "llama3",
         )
     elif backend_type == "openai":
-        api_key = os.getenv("OPENAI_API_KEY", "")
+        api_key = config.api_key or os.getenv("OPENAI_API_KEY", "")
         if not api_key:
-            raise ValueError("OPENAI_API_KEY env var required for openai backend")
+            raise ValueError("OPENAI_API_KEY required for openai backend")
         return OpenAIBackend(
             model=config.model or "gpt-4o",
             api_key=api_key,
         )
     elif backend_type == "anthropic":
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        api_key = config.api_key or os.getenv("ANTHROPIC_API_KEY", "")
         if not api_key:
-            raise ValueError("ANTHROPIC_API_KEY env var required for anthropic backend")
+            raise ValueError("ANTHROPIC_API_KEY required for anthropic backend")
         return AnthropicBackend(
             model=config.model or "claude-sonnet-4-20250514",
             api_key=api_key,

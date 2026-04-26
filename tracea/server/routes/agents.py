@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, HTTPException
+from pydantic import BaseModel
 from tracea.server.db import get_db
 from typing import Optional
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
+
+
+class UserCreate(BaseModel):
+    user_id: str
+    name: str = ""
+    email: str = ""
 
 
 @router.get("/agents")
@@ -34,13 +41,36 @@ async def list_agents(user_id: Optional[str] = None):
 
 @router.get("/users")
 async def list_users():
-    """Return distinct user_ids for the team picker."""
+    """Return all team members from the users table."""
     db = await anext(get_db())
     rows = await db.execute("""
-        SELECT DISTINCT user_id
-        FROM sessions
-        WHERE user_id IS NOT NULL AND user_id != ''
-        ORDER BY user_id ASC
+        SELECT user_id, name, email, created_at
+        FROM users
+        ORDER BY created_at DESC
     """)
-    users = [row["user_id"] for row in await rows.fetchall()]
+    users = [dict(r) for r in await rows.fetchall()]
     return {"users": users}
+
+
+@router.post("/users")
+async def create_user(body: UserCreate):
+    """Add a new team member."""
+    db = await anext(get_db())
+    try:
+        await db.execute(
+            "INSERT INTO users (user_id, name, email) VALUES (?, ?, ?)",
+            (body.user_id, body.name, body.email),
+        )
+        await db.commit()
+    except Exception as e:
+        raise HTTPException(status_code=409, detail=f"User already exists or invalid: {e}")
+    return {"status": "ok", "user_id": body.user_id}
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str):
+    """Remove a team member."""
+    db = await anext(get_db())
+    await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+    await db.commit()
+    return {"status": "ok"}

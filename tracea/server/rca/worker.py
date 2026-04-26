@@ -6,6 +6,7 @@ import os
 from tracea.server.rca.backends import load_backend, RCABackend
 from tracea.server.rca.models import RCABackendConfig, RCAContext
 from tracea.server.rca.prompts import build_rca_prompt, load_custom_prompt
+from tracea.server.settings import get_rca_config
 
 _POLLO_INTERVAL = 5  # seconds between pending-issue polls
 
@@ -13,16 +14,17 @@ _worker_task: asyncio.Task | None = None
 _stop_event: asyncio.Event | None = None
 
 
-def _load_config() -> RCABackendConfig:
-    """Load RCA config from environment variables."""
-    backend = os.getenv("TRACEA_RCA_BACKEND", "disabled")
+async def _load_config() -> RCABackendConfig:
+    """Load RCA config from DB settings, falling back to env vars."""
+    cfg = await get_rca_config()
     return RCABackendConfig(
-        backend=backend,
-        model=os.getenv("TRACEA_RCA_MODEL"),
-        base_url=os.getenv("TRACEA_RCA_BASE_URL") or os.getenv("ANTHROPIC_BASE_URL"),
-        prompt_path=os.getenv("TRACEA_RCA_PROMPT_PATH"),
-        redact_content=os.getenv("TRACEA_RCA_REDACT_CONTENT", "true").lower() == "true",
-        max_tokens=int(os.getenv("TRACEA_RCA_MAX_TOKENS", "2048")),
+        backend=cfg["backend"],
+        model=cfg.get("model") or None,
+        base_url=cfg.get("base_url") or None,
+        prompt_path=cfg.get("prompt_path") or None,
+        redact_content=cfg.get("redact_content", True),
+        max_tokens=cfg.get("max_tokens", 2048),
+        api_key=cfg.get("api_key") or None,
     )
 
 
@@ -208,13 +210,6 @@ async def _fetch_session_start(db, session_id: str) -> str | None:
 async def _rca_worker_loop() -> None:
     """Poll for pending issues, run RCA, update status to done or failed."""
     global _stop_event
-    config = _load_config()
-    backend: RCABackend = load_backend(config)
-
-    custom_prompt = load_custom_prompt(config.prompt_path)
-
-    if config.backend != "disabled":
-        print(f"[tracea] RCAWorker started with backend={config.backend}")
 
     from tracea.server.db import get_db
 
@@ -223,8 +218,18 @@ async def _rca_worker_loop() -> None:
             break
         await asyncio.sleep(_POLLO_INTERVAL)
 
+        # Reload config each poll so UI changes take effect without restart
+        config = await _load_config()
         if config.backend == "disabled":
             continue  # Nothing to do
+
+        try:
+            backend: RCABackend = load_backend(config)
+        except Exception as e:
+            print(f"[tracea] RCA backend load failed: {e}")
+            continue
+
+        custom_prompt = load_custom_prompt(config.prompt_path)
 
         try:
             db_gen = get_db()

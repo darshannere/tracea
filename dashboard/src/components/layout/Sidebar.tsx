@@ -1,8 +1,6 @@
-import { useEffect } from 'react'
 import { NavLink } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useUser } from '@/hooks/UserContext'
-import api from '@/lib/api'
 import {
   LayoutDashboard,
   Activity,
@@ -19,18 +17,12 @@ const navItems = [
   { to: '/sessions', icon: Activity, label: 'Sessions' },
   { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/issues', icon: AlertCircle, label: 'Issues' },
+  { to: '/team', icon: Users, label: 'Team' },
   { to: '/settings', icon: Settings, label: 'Settings' },
 ]
 
 export function Sidebar() {
-  const { selectedUser, setSelectedUser, users, setUsers } = useUser()
-
-  useEffect(() => {
-    api
-      .get<{ users: string[] }>('/api/v1/users')
-      .then((res) => setUsers(res.data.users))
-      .catch(() => {})
-  }, [setUsers])
+  const { selectedUser, setSelectedUser, users } = useUser()
 
   return (
     <aside className="w-60 bg-zinc-100 flex flex-col h-full">
@@ -71,8 +63,8 @@ export function Sidebar() {
         >
           <option value="">All members</option>
           {users.map((u) => (
-            <option key={u} value={u}>
-              {u}
+            <option key={u.user_id} value={u.user_id}>
+              {u.name || u.user_id}
             </option>
           ))}
         </select>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import yaml from 'js-yaml'
-import { Settings as SettingsIcon, Loader2 } from 'lucide-react'
+import { Settings as SettingsIcon, Loader2, BrainCircuit } from 'lucide-react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { YamlEditor } from '@/components/settings/YamlEditor'
@@ -9,6 +9,15 @@ import { RuleTemplates } from '@/components/settings/RuleTemplates'
 import { RulesHelpPanel } from '@/components/settings/RulesHelpPanel'
 import { AlertsHelpPanel } from '@/components/settings/AlertsHelpPanel'
 import api from '@/lib/api'
+
+interface RCAConfig {
+  backend: string
+  model: string
+  base_url: string
+  max_tokens: number
+  api_key_present: boolean
+  api_key?: string
+}
 
 function validateYaml(content: string): { valid: boolean; error?: string } {
   try {
@@ -22,7 +31,7 @@ function validateYaml(content: string): { valid: boolean; error?: string } {
   }
 }
 
-type TabId = 'alerts' | 'rules'
+type TabId = 'alerts' | 'rules' | 'rca'
 
 interface TabState {
   content: string
@@ -36,6 +45,16 @@ const DEFAULT_CONTENT = '# No content loaded yet\n'
 
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<TabId>('alerts')
+
+  const [rcaConfig, setRcaConfig] = useState<RCAConfig>({
+    backend: 'disabled',
+    model: '',
+    base_url: '',
+    max_tokens: 2048,
+    api_key_present: false,
+  })
+  const [rcaLoading, setRcaLoading] = useState(false)
+  const [rcaSaving, setRcaSaving] = useState(false)
 
   const [alertsState, setAlertsState] = useState<TabState>({
     content: DEFAULT_CONTENT,
@@ -97,6 +116,19 @@ export function SettingsPage() {
     }
   }, [])
 
+  const loadRca = useCallback(async () => {
+    setRcaLoading(true)
+    try {
+      const res = await api.get<RCAConfig>('/api/v1/config/rca')
+      setRcaConfig(res.data)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Failed to load RCA config: ${msg}`)
+    } finally {
+      setRcaLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (activeTab === 'alerts' && !alertsState.loaded && !alertsState.loading) {
       loadAlerts()
@@ -104,7 +136,23 @@ export function SettingsPage() {
     if (activeTab === 'rules' && !rulesState.loaded && !rulesState.loading) {
       loadRules()
     }
-  }, [activeTab, alertsState.loaded, alertsState.loading, rulesState.loaded, rulesState.loading, loadAlerts, loadRules])
+    if (activeTab === 'rca') {
+      loadRca()
+    }
+  }, [activeTab, alertsState.loaded, alertsState.loading, rulesState.loaded, rulesState.loading, loadAlerts, loadRules, loadRca])
+
+  const saveRca = async () => {
+    setRcaSaving(true)
+    try {
+      await api.put('/api/v1/config/rca', rcaConfig)
+      toast.success('RCA config saved')
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e)
+      toast.error(`Save failed: ${msg}`)
+    } finally {
+      setRcaSaving(false)
+    }
+  }
 
   const saveAlerts = async (content: string) => {
     const validation = validateYaml(content)
@@ -171,6 +219,7 @@ export function SettingsPage() {
           <TabsList>
             <TabsTrigger value="alerts">alerts.yaml</TabsTrigger>
             <TabsTrigger value="rules">detection_rules.yaml</TabsTrigger>
+            <TabsTrigger value="rca">RCA Config</TabsTrigger>
           </TabsList>
           <div className="flex items-center gap-2">
             {activeTab === 'rules' && (
@@ -193,6 +242,16 @@ export function SettingsPage() {
                 disabled={rulesState.saving || !rulesState.loaded}
               >
                 {rulesState.saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                Save Changes
+              </Button>
+            )}
+            {activeTab === 'rca' && (
+              <Button
+                size="sm"
+                onClick={saveRca}
+                disabled={rcaSaving}
+              >
+                {rcaSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Save Changes
               </Button>
             )}
@@ -244,6 +303,86 @@ export function SettingsPage() {
               </div>
               <div className="h-full min-h-[200px]">
                 <RulesHelpPanel />
+              </div>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="rca" className="flex-1 min-h-0 mt-2">
+          {rcaLoading ? (
+            <div className="flex items-center justify-center h-64 text-zinc-400">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : (
+            <div className="max-w-xl space-y-6">
+              <div className="flex items-center gap-2 text-sm text-zinc-500">
+                <BrainCircuit className="h-4 w-4" />
+                <span>Configure the LLM backend for automated root-cause analysis.</span>
+              </div>
+
+              <div className="space-y-4 bg-white border border-zinc-200 rounded-lg p-6">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Backend</label>
+                  <select
+                    value={rcaConfig.backend}
+                    onChange={(e) => setRcaConfig({ ...rcaConfig, backend: e.target.value })}
+                    className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  >
+                    <option value="disabled">Disabled</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                    <option value="ollama">Ollama</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Model</label>
+                  <input
+                    type="text"
+                    value={rcaConfig.model}
+                    onChange={(e) => setRcaConfig({ ...rcaConfig, model: e.target.value })}
+                    placeholder={rcaConfig.backend === 'openai' ? 'gpt-4o' : rcaConfig.backend === 'anthropic' ? 'claude-sonnet-4' : 'llama3'}
+                    className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Base URL</label>
+                  <input
+                    type="text"
+                    value={rcaConfig.base_url}
+                    onChange={(e) => setRcaConfig({ ...rcaConfig, base_url: e.target.value })}
+                    placeholder={rcaConfig.backend === 'ollama' ? 'http://localhost:11434' : ''}
+                    className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                  <p className="text-[10px] text-zinc-400 mt-1">Only needed for Ollama or custom proxies.</p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-500 mb-1">Max Tokens</label>
+                  <input
+                    type="number"
+                    value={rcaConfig.max_tokens}
+                    onChange={(e) => setRcaConfig({ ...rcaConfig, max_tokens: parseInt(e.target.value) || 2048 })}
+                    className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+
+                {rcaConfig.backend !== 'disabled' && rcaConfig.backend !== 'ollama' && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-500 mb-1">
+                      API Key {rcaConfig.api_key_present && <span className="text-emerald-600">(already set)</span>}
+                    </label>
+                    <input
+                      type="password"
+                      value={rcaConfig.api_key_present ? '' : ''}
+                      onChange={(e) => setRcaConfig({ ...rcaConfig, api_key: e.target.value })}
+                      placeholder={rcaConfig.api_key_present ? '••••••••' : 'sk-...'}
+                      className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                    />
+                    <p className="text-[10px] text-zinc-400 mt-1">Leave blank to keep existing key.</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

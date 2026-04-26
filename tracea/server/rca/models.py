@@ -3,13 +3,14 @@ from typing import Literal
 
 
 class RCABackendConfig(BaseModel):
-    """Configuration for RCA backend, driven by env vars."""
+    """Configuration for RCA backend, driven by env vars or DB settings."""
     backend: Literal["disabled", "ollama", "openai", "anthropic"] = "disabled"
     model: str | None = None  # e.g., "gpt-4o", "claude-sonnet-4"
     base_url: str | None = None  # for ollama/custom OpenAI compatible
     prompt_path: str | None = None  # TRACEA_RCA_PROMPT_PATH
     redact_content: bool = True  # rca_redact_content default True
     max_tokens: int = 2048  # max tokens for RCA response
+    api_key: str | None = None  # LLM API key (overrides env var)
 
 
 class RCAContext(BaseModel):

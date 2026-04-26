@@ -4,11 +4,21 @@ import tempfile
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from tracea.server.settings import get_rca_config, set_setting
+
 router = APIRouter(prefix="/api/v1/config", tags=["config"])
 
 
 class ConfigContent(BaseModel):
     content: str
+
+
+class RCAConfigBody(BaseModel):
+    backend: str = "disabled"
+    model: str = ""
+    base_url: str = ""
+    max_tokens: int = 2048
+    api_key: str = ""
 
 
 def _read_yaml(path: str) -> str:
@@ -104,8 +114,34 @@ async def put_alerts(body: ConfigContent):
 
 @router.get("/rca")
 async def get_rca():
-    """Return current RCA backend configuration."""
+    """Return current RCA backend configuration (api_key omitted)."""
+    cfg = await get_rca_config()
     return {
-        "backend": os.getenv("TRACEA_RCA_BACKEND", "disabled"),
-        "model": os.getenv("TRACEA_RCA_MODEL", ""),
+        "backend": cfg["backend"],
+        "model": cfg["model"],
+        "base_url": cfg["base_url"],
+        "max_tokens": cfg["max_tokens"],
+        "api_key_present": bool(cfg.get("api_key")),
     }
+
+
+@router.put("/rca")
+async def put_rca(body: RCAConfigBody):
+    """Update RCA configuration in settings store."""
+    valid_backends = {"disabled", "openai", "anthropic", "ollama"}
+    if body.backend not in valid_backends:
+        raise HTTPException(status_code=422, detail=f"Invalid backend: {body.backend}")
+
+    await set_setting("TRACEA_RCA_BACKEND", body.backend)
+    await set_setting("TRACEA_RCA_MODEL", body.model)
+    await set_setting("TRACEA_RCA_BASE_URL", body.base_url)
+    await set_setting("TRACEA_RCA_MAX_TOKENS", str(body.max_tokens))
+
+    # Store API key under the appropriate env-var key so the backend loader finds it
+    if body.api_key:
+        if body.backend == "openai":
+            await set_setting("OPENAI_API_KEY", body.api_key)
+        elif body.backend == "anthropic":
+            await set_setting("ANTHROPIC_API_KEY", body.api_key)
+
+    return {"status": "ok", "message": "RCA config updated"}
