@@ -106,6 +106,19 @@ curl -X POST http://localhost:8080/api/v1/events \
 
 Refresh the dashboard — your session appears instantly.
 
+**4. Connect your agents**
+
+Install the Python SDK and run the setup wizard:
+
+```bash
+pip install tracea
+tracea init
+```
+
+This creates `~/.tracea/config.json` with your server URL, API key, and user ID so all plugins and SDKs share the same configuration.
+
+See [tracea-plugins/](tracea-plugins/) for per-agent hook installation.
+
 ---
 
 ## 🏗️ Architecture
@@ -206,6 +219,8 @@ cp .env.example .env
 | `TRACEA_RULES_PATH` | Detection rules YAML | `./data/detection_rules.yaml` |
 | `TRACEA_ALERTS_PATH` | Alerts routing YAML | `./data/alerts.yaml` |
 | `TRACEA_RCA_BACKEND` | `disabled` / `openai` / `anthropic` / `ollama` | `disabled` |
+| `TRACEA_AUTH_MODE` | `disabled` or `api_key` | `disabled` |
+| `TRACEA_USER_ID` | Team member ID for multi-user dashboards | — |
 | `TRACEA_DEV_MODE` | `1` = bypass auth (local only) | — |
 
 ### Dev Mode

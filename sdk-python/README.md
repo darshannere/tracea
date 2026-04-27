@@ -23,7 +23,7 @@ pip install -e "."
 import tracea
 
 # Initialize — this patches httpx to intercept OpenAI, Anthropic, etc.
-tracea.init(api_key="your-api-key", server_url="http://localhost:8080")
+tracea.init(api_key="your-api-key", server_url="http://localhost:8080", user_id="darshan")
 
 # All LLM calls are now automatically traced
 import openai
@@ -88,11 +88,33 @@ with tracea.LogTool("search", arguments={"query": "python"}) as lt:
 
 ## Configuration
 
+### `tracea init` wizard
+
+Run the interactive setup wizard to create `~/.tracea/config.json`:
+
+```bash
+tracea init
+```
+
+This持久化保存s your server URL, API key, user ID, and agent ID so you don't have to set env vars in every shell.
+
+### Resolution order
+
+Values are resolved in this priority (highest first):
+
+1. Explicit parameter passed to `tracea.init()`
+2. Environment variable
+3. `~/.tracea/config.json`
+4. Built-in default
+
+### Parameters
+
 | Parameter | Env Var | Default | Description |
 |-----------|---------|---------|-------------|
 | `api_key` | `TRACEA_API_KEY` | — | Required. Your tracea API key. |
 | `server_url` | `TRACEA_SERVER_URL` | `http://localhost:8080` | tracea server URL. |
 | `base_url` | `TRACEA_BASE_URL` | `server_url` | Base URL for LLM API calls (Azure, proxies). |
+| `user_id` | `TRACEA_USER_ID` | — | Team member ID (must exist in the web UI). |
 | `metadata` | — | `{}` | Global metadata applied to all events. |
 | `tags` | — | `[]` | Global tags applied to all events. |
 

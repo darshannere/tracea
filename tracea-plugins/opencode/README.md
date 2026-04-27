@@ -23,6 +23,18 @@ OpenCode supports a TypeScript plugin system via `.opencode/plugins/*.ts`. This 
    export TRACEA_SERVER_URL=http://localhost:8080
    export TRACEA_API_KEY=dev-mode
    export TRACEA_AGENT_ID=opencode
+   export TRACEA_USER_ID=darshan   # must match a user in the web UI
+   ```
+
+   Or create `~/.tracea/config.json` as a fallback:
+
+   ```json
+   {
+     "server_url": "http://localhost:8080",
+     "api_key": "dev-mode",
+     "user_id": "darshan",
+     "agent_id": "opencode"
+   }
    ```
 
 ## Hook capabilities

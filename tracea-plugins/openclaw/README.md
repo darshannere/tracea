@@ -45,6 +45,18 @@ cp -r tracea-plugins/openclaw /path/to/your/openclaw-plugins/
 export TRACEA_SERVER_URL="http://localhost:8080"
 export TRACEA_API_KEY="your-api-key"
 export TRACEA_AGENT_ID="openclaw"
+export TRACEA_USER_ID="darshan"   # must match a user in the web UI
+```
+
+Or create `~/.tracea/config.json` as a fallback:
+
+```json
+{
+  "server_url": "http://localhost:8080",
+  "api_key": "your-api-key",
+  "user_id": "darshan",
+  "agent_id": "openclaw"
+}
 ```
 
 4. Clear the jiti cache and restart:

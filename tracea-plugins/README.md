@@ -31,6 +31,28 @@ Each plugin directory contains:
 | `TRACEA_SERVER_URL` | `http://localhost:8080`  | tracea server URL  |
 | `TRACEA_API_KEY`    | `dev-mode`               | API key            |
 | `TRACEA_AGENT_ID`   | Agent-specific default   | Agent identifier   |
+| `TRACEA_USER_ID`    | —                        | Team member ID     |
+
+### Config file (alternative to env vars)
+
+All plugins also read `~/.tracea/config.json` as a fallback. Run the setup wizard once:
+
+```bash
+# If you have the Python SDK installed
+pip install tracea
+tracea init
+```
+
+Or create the file manually:
+
+```json
+{
+  "server_url": "http://localhost:8080",
+  "api_key": "dev-mode",
+  "user_id": "darshan",
+  "agent_id": "claude-code"
+}
+```
 
 ## Architecture
 

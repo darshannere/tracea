@@ -39,7 +39,10 @@ Claude Code supports lifecycle hooks via `.claude/settings.json`. This plugin us
    export TRACEA_SERVER_URL=http://localhost:8080
    export TRACEA_API_KEY=dev-mode
    export TRACEA_AGENT_ID=claude-code
+   export TRACEA_USER_ID=darshan   # must match a user in the web UI
    ```
+
+   Or use `tracea init` (Python SDK) to create `~/.tracea/config.json` once.
 
 ## Hook capabilities
 
