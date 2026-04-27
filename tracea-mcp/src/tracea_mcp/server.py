@@ -1,11 +1,13 @@
 """MCP server — main entry point for tracea-mcp."""
 import argparse
 import asyncio
+import json
 import os
 import signal
 import sys
 import time
 import uuid
+from pathlib import Path
 
 from tracea_mcp.transport.stdio import StdioTransport
 from tracea_mcp.tools.registry import ToolRegistry
@@ -13,15 +15,34 @@ from tracea_mcp.session import create_session, next_sequence_for
 from tracea_mcp.client import get_client
 
 
+def _discover_config() -> dict:
+    """Load ~/.tracea/config.json if it exists."""
+    p = Path.home() / ".tracea" / "config.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
 class MCPServer:
     """MCP server over stdio transport."""
 
     def __init__(self, agent_id: str = "claude-code"):
+        discovered = _discover_config()
         self.transport = StdioTransport()
         self.registry = ToolRegistry()
-        self.agent_id = agent_id
-        self.user_id = os.environ.get("TRACEA_USER_ID", "")
-        self.session = create_session(agent_id)
+        self.agent_id = (
+            agent_id
+            or os.environ.get("TRACEA_AGENT_ID")
+            or discovered.get("agent_id", "claude-code")
+        )
+        self.user_id = (
+            os.environ.get("TRACEA_USER_ID")
+            or discovered.get("user_id", "")
+        )
+        self.session = create_session(self.agent_id)
         self.running = True
 
     async def post_events(self, events: list[dict]):

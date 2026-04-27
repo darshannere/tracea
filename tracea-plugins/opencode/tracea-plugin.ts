@@ -7,6 +7,8 @@
  * OpenCode will auto-discover and load the plugin.
  */
 
+import * as fs from "fs";
+import * as path from "path";
 import type { Plugin, HookContext } from "opencode";
 
 interface TraceaConfig {
@@ -15,10 +17,31 @@ interface TraceaConfig {
   userId: string;
 }
 
+function loadConfig(): Partial<TraceaConfig> {
+  try {
+    const configPath = path.join(
+      process.env.HOME || process.env.USERPROFILE || ".",
+      ".tracea",
+      "config.json"
+    );
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    return {
+      serverUrl: parsed.server_url,
+      agentId: parsed.agent_id,
+      userId: parsed.user_id,
+    };
+  } catch {
+    return {};
+  }
+}
+
+const DISCOVERED = loadConfig();
+
 const DEFAULT_CONFIG: TraceaConfig = {
-  serverUrl: process.env.TRACEA_SERVER_URL || "http://localhost:8080",
-  agentId: process.env.TRACEA_AGENT_ID || "opencode",
-  userId: process.env.TRACEA_USER_ID || "",
+  serverUrl: process.env.TRACEA_SERVER_URL || DISCOVERED.serverUrl || "http://localhost:8080",
+  agentId: process.env.TRACEA_AGENT_ID || DISCOVERED.agentId || "opencode",
+  userId: process.env.TRACEA_USER_ID || DISCOVERED.userId || "",
 };
 
 const sessionId = `${DEFAULT_CONFIG.agentId}-${Date.now()}-${crypto.randomUUID()}`;

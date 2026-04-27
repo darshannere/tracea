@@ -33,10 +33,31 @@ import sys
 import urllib.request
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-SERVER_URL = os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
-AGENT_ID = os.environ.get("TRACEA_AGENT_ID", "kimi")
-USER_ID = os.environ.get("TRACEA_USER_ID", "")
+def _load_config() -> dict:
+    p = Path.home() / ".tracea" / "config.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+_DISCOVERED = _load_config()
+SERVER_URL = (
+    os.environ.get("TRACEA_SERVER_URL")
+    or _DISCOVERED.get("server_url", "http://localhost:8080")
+)
+AGENT_ID = (
+    os.environ.get("TRACEA_AGENT_ID")
+    or _DISCOVERED.get("agent_id", "kimi")
+)
+USER_ID = (
+    os.environ.get("TRACEA_USER_ID")
+    or _DISCOVERED.get("user_id", "")
+)
 
 # In-memory store to correlate pre/post tool calls within a process.
 # Kimi runs PreToolUse and PostToolUse as separate subprocess calls,

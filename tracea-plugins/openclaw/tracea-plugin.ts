@@ -28,16 +28,40 @@
  *      rm -rf /tmp/jiti && systemctl --user restart openclaw-gateway
  */
 
+import * as fs from "fs";
+import * as path from "path";
+
 interface TraceaConfig {
   serverUrl: string;
   agentId: string;
   userId: string;
 }
 
+function loadConfig(): Partial<TraceaConfig> {
+  try {
+    const configPath = path.join(
+      process.env.HOME || process.env.USERPROFILE || ".",
+      ".tracea",
+      "config.json"
+    );
+    const raw = fs.readFileSync(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    return {
+      serverUrl: parsed.server_url,
+      agentId: parsed.agent_id,
+      userId: parsed.user_id,
+    };
+  } catch {
+    return {};
+  }
+}
+
+const DISCOVERED = loadConfig();
+
 const CONFIG: TraceaConfig = {
-  serverUrl: process.env.TRACEA_SERVER_URL || "http://localhost:8080",
-  agentId: process.env.TRACEA_AGENT_ID || "openclaw",
-  userId: process.env.TRACEA_USER_ID || "",
+  serverUrl: process.env.TRACEA_SERVER_URL || DISCOVERED.serverUrl || "http://localhost:8080",
+  agentId: process.env.TRACEA_AGENT_ID || DISCOVERED.agentId || "openclaw",
+  userId: process.env.TRACEA_USER_ID || DISCOVERED.userId || "",
 };
 
 // In-flight turn tracking: sessionKey → turn state

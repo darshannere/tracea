@@ -23,9 +23,23 @@
 set -euo pipefail
 
 HOOK_TYPE="${1:-}"
-SERVER_URL="${TRACEA_SERVER_URL:-http://localhost:8080}"
-AGENT_ID="${TRACEA_AGENT_ID:-claude-code}"
+SERVER_URL="${TRACEA_SERVER_URL:-}"
+AGENT_ID="${TRACEA_AGENT_ID:-}"
 USER_ID="${TRACEA_USER_ID:-}"
+
+# Fallback to ~/.tracea/config.json
+if [[ -z "$SERVER_URL" && -f "$HOME/.tracea/config.json" ]]; then
+  SERVER_URL=$(jq -r '.server_url // empty' "$HOME/.tracea/config.json" 2>/dev/null)
+fi
+if [[ -z "$AGENT_ID" && -f "$HOME/.tracea/config.json" ]]; then
+  AGENT_ID=$(jq -r '.agent_id // empty' "$HOME/.tracea/config.json" 2>/dev/null)
+fi
+if [[ -z "$USER_ID" && -f "$HOME/.tracea/config.json" ]]; then
+  USER_ID=$(jq -r '.user_id // empty' "$HOME/.tracea/config.json" 2>/dev/null)
+fi
+
+SERVER_URL="${SERVER_URL:-http://localhost:8080}"
+AGENT_ID="${AGENT_ID:-claude-code}"
 
 # Stable session ID for this Claude process (hostname + pid)
 SESSION_ID="${TRACEA_SESSION_ID:-$(python3 -c "import uuid; print(uuid.uuid5(uuid.NAMESPACE_DNS, '\$(hostname)-\$$'))")}"
