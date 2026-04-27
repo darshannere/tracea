@@ -51,3 +51,8 @@ class TracedEvent(BaseModel):
 class EventBatch(BaseModel):
     events: list[TracedEvent]
     batch_id: Optional[str] = None
+
+
+class ApiKeyCreate(BaseModel):
+    user_id: str
+    name: str = ""

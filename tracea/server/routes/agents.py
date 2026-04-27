@@ -1,7 +1,10 @@
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from tracea.server.db import get_db
+from tracea.server.models import ApiKeyCreate
 from typing import Optional
+import secrets
+import hashlib
 
 router = APIRouter(prefix="/api/v1", tags=["agents"])
 
@@ -72,5 +75,59 @@ async def delete_user(user_id: str):
     """Remove a team member."""
     db = await anext(get_db())
     await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+    await db.commit()
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# API Keys
+# ---------------------------------------------------------------------------
+
+@router.get("/api-keys")
+async def list_api_keys():
+    """List all API keys (hashes redacted)."""
+    db = await anext(get_db())
+    rows = await db.execute("""
+        SELECT key_hash, user_id, name, created_at, last_used
+        FROM api_keys
+        ORDER BY created_at DESC
+    """)
+    keys = []
+    for r in await rows.fetchall():
+        keys.append({
+            "key_hash": r["key_hash"][:16] + "...",
+            "user_id": r["user_id"],
+            "name": r["name"],
+            "created_at": r["created_at"],
+            "last_used": r["last_used"],
+        })
+    return {"api_keys": keys}
+
+
+@router.post("/api-keys")
+async def create_api_key(body: ApiKeyCreate):
+    """Create a new API key for a user. Returns the plaintext key once."""
+    db = await anext(get_db())
+    # Verify user exists
+    row = await db.execute("SELECT 1 FROM users WHERE user_id = ?", (body.user_id,))
+    if not await row.fetchone():
+        raise HTTPException(status_code=400, detail=f"User '{body.user_id}' does not exist")
+
+    plaintext = "tr_" + secrets.token_urlsafe(32)
+    key_hash = hashlib.sha256(plaintext.encode()).hexdigest()
+
+    await db.execute(
+        "INSERT INTO api_keys (key_hash, user_id, name) VALUES (?, ?, ?)",
+        (key_hash, body.user_id, body.name),
+    )
+    await db.commit()
+    return {"status": "ok", "api_key": plaintext, "user_id": body.user_id}
+
+
+@router.delete("/api-keys/{key_hash}")
+async def revoke_api_key(key_hash: str):
+    """Revoke an API key by its full hash."""
+    db = await anext(get_db())
+    await db.execute("DELETE FROM api_keys WHERE key_hash = ?", (key_hash,))
     await db.commit()
     return {"status": "ok"}
