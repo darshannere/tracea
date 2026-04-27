@@ -1,7 +1,8 @@
-"""tracea SDK configuration — singleton, env vars primary."""
+"""tracea SDK configuration — singleton, env vars primary, config file fallback."""
 from __future__ import annotations
 import os
 from dataclasses import dataclass, field
+from tracea.config_loader import discover_config
 
 @dataclass
 class TraceaConfig:
@@ -29,12 +30,22 @@ def init(
     if _config is not None:
         raise RuntimeError("tracea.init() already called")
 
-    # Env vars are primary; params override if provided
-    resolved_api_key = api_key or os.environ.get("TRACEA_API_KEY", "")
+    # Resolution order: explicit param → env var → config file → default
+    discovered = discover_config()
 
-    resolved_server_url = server_url or os.environ.get("TRACEA_SERVER_URL", "http://localhost:8080")
-    resolved_base_url = base_url or os.environ.get("TRACEA_BASE_URL", resolved_server_url)
-    resolved_user_id = user_id or os.environ.get("TRACEA_USER_ID", "")
+    def _resolve(param, env_name, config_key, default=""):
+        if param is not None:
+            return param
+        env_val = os.environ.get(env_name)
+        if env_val is not None:
+            return env_val
+        return discovered.get(config_key, default)
+
+    resolved_api_key = _resolve(api_key, "TRACEA_API_KEY", "api_key", "")
+    resolved_server_url = _resolve(server_url, "TRACEA_SERVER_URL", "server_url", "http://localhost:8080")
+    resolved_base_url = _resolve(base_url, "TRACEA_BASE_URL", "base_url", resolved_server_url)
+    resolved_user_id = _resolve(user_id, "TRACEA_USER_ID", "user_id", "")
+    resolved_agent_id = _resolve(None, "TRACEA_AGENT_ID", "agent_id", "")
     resolved_metadata = metadata or {}
     resolved_tags = tags or []
 

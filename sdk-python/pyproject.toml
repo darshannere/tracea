@@ -37,6 +37,9 @@ dev = [
     "openai>=1.0",
 ]
 
+[project.scripts]
+tracea = "tracea.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/tracea"]
 
