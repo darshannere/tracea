@@ -139,9 +139,12 @@ export function SessionsPage() {
         ),
       },
       {
-        accessorKey: 'started_at',
-        header: 'Start Time',
-        cell: ({ row }) => formatDate(row.original.started_at),
+        accessorKey: 'last_event_at',
+        header: 'Last Active',
+        cell: ({ row }) => {
+          const ts = row.original.last_event_at
+          return ts ? formatDate(ts) : <span className="text-zinc-400 text-xs">—</span>
+        },
       },
       {
         id: 'duration',

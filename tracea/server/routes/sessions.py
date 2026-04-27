@@ -7,8 +7,8 @@ from typing import Optional
 router = APIRouter(prefix="/api/v1", tags=["sessions"])
 
 
-def encode_cursor(created_at: str, session_id: str) -> str:
-    return base64.b64encode(json.dumps({"created_at": created_at, "session_id": session_id}).encode()).decode()
+def encode_cursor(value: str, session_id: str) -> str:
+    return base64.b64encode(json.dumps({"v": value, "session_id": session_id}).encode()).decode()
 
 
 def _decode_cursor(cursor: str) -> dict:
@@ -39,19 +39,19 @@ async def list_sessions(
 
     if cursor:
         data = _decode_cursor(cursor)
-        where_parts.append("(started_at, session_id) < (?, ?)")
-        params.extend([data["created_at"], data["session_id"]])
+        where_parts.append("(last_event_at, session_id) < (?, ?)")
+        params.extend([data["v"], data["session_id"]])
 
     where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
     rows = await db.execute(
-        f"SELECT * FROM sessions {where} ORDER BY started_at DESC LIMIT ?",
+        f"SELECT * FROM sessions {where} ORDER BY last_event_at DESC LIMIT ?",
         params + [limit + 1]
     )
     sessions = await rows.fetchall()
     has_more = len(sessions) > limit
     sessions = sessions[:limit] if has_more else sessions
-    next_cursor = encode_cursor(sessions[-1]["started_at"], sessions[-1]["session_id"]) if has_more and sessions else None
+    next_cursor = encode_cursor(sessions[-1]["last_event_at"], sessions[-1]["session_id"]) if has_more and sessions else None
 
     count_parts = []
     count_params = []
