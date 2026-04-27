@@ -66,7 +66,8 @@ def tracea_init(respx_mock):
     import tracea
 
     # Init tracea — this installs httpx patch on top of respx mock
-    tracea.init(api_key="test-key", server_url="https://api.openai.com/")
+    # Explicit user_id="" prevents picking up ~/.tracea/config.json in tests
+    tracea.init(api_key="test-key", server_url="https://api.openai.com/", user_id="")
 
     yield
 

@@ -126,6 +126,7 @@ async def sdk_initialized(server_api_key: str, tracea_server: str):
     tracea.init(
         api_key=server_api_key,
         server_url=tracea_server,
+        user_id="",
         metadata={"test": "pys-12-integration"},
     )
 
