@@ -17,9 +17,13 @@ Trace LLM sessions, detect anomalies, analyze root causes, and route alerts — 
 
 ## 📸 Screenshots
 
-| Overview | Sessions | Issues |
-|----------|----------|--------|
+| Dashboard | Sessions | Issues |
+|-----------|----------|--------|
 | ![Dashboard](.github/screenshot-dashboard.png) | ![Sessions](.github/screenshot-sessions.png) | ![Issues](.github/screenshot-issues.png) |
+
+| Live | Brain |
+|------|-------|
+| ![Live](.github/screenshot-live.png) | ![Brain](.github/screenshot-brain.png) |
 
 ---
 
