@@ -3,6 +3,9 @@
 import asyncio
 import json
 import os
+
+import aiosqlite
+
 from tracea.server.rca.backends import load_backend, RCABackend
 from tracea.server.rca.models import RCABackendConfig, RCAContext
 from tracea.server.rca.prompts import build_rca_prompt, load_custom_prompt
@@ -207,11 +210,158 @@ async def _fetch_session_start(db, session_id: str) -> str | None:
     return row["started_at"] if row else None
 
 
+async def _open_db() -> aiosqlite.Connection:
+    """Open a fresh SQLite connection (not the singleton)."""
+    from tracea.server.db import DB_PATH
+
+    db = await aiosqlite.connect(DB_PATH, isolation_level=None)
+    db.row_factory = aiosqlite.Row
+    return db
+
+
+async def _process_issue(backend: RCABackend, config: RCABackendConfig, custom_prompt: str | None, row: aiosqlite.Row) -> None:
+    """Process a single issue: fetch context, call LLM, update DB.
+
+    Manages its own DB connection lifecycle: opens, fetches context, closes
+    before the LLM call, reopens for update, then closes.
+    """
+    issue_id = row["issue_id"]
+    try:
+        session_id = row["session_id"]
+        event_id = row["event_id"]
+        rule_id = row["rule_id"] or ""
+
+        # 1. Open DB and fetch all context
+        db = await _open_db()
+        try:
+            # Parse captured_values JSON
+            captured = json.loads(row["captured_values"] or "{}")
+
+            # Get triggering event data
+            event_cursor = await db.execute(
+                "SELECT type, error, cost_usd, duration_ms, tool_name, model, sequence "
+                "FROM events WHERE event_id = ?",
+                (event_id,),
+            )
+            event_row = await event_cursor.fetchone()
+            triggering_events = []
+            if event_row:
+                triggering_events = [{
+                    "type": event_row["type"] or "",
+                    "error": event_row["error"] or "",
+                    "cost_usd": event_row["cost_usd"] or 0,
+                    "duration_ms": event_row["duration_ms"] or 0,
+                    "tool_name": event_row["tool_name"] or "",
+                    "model": event_row["model"] or "",
+                    "sequence": event_row["sequence"] or 0,
+                }]
+
+            session_aggregates = {
+                "cost_usd": row["session_cost_total"] or 0,
+                "duration_ms": row["session_duration_ms"] or 0,
+                "event_count": row["session_event_count"] or 0,
+            }
+
+            # Add token aggregates if available
+            token_cursor = await db.execute(
+                "SELECT SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens "
+                "FROM events WHERE session_id = ?",
+                (session_id,),
+            )
+            token_row = await token_cursor.fetchone()
+            if token_row:
+                session_aggregates["input_tokens"] = token_row["input_tokens"] or 0
+                session_aggregates["output_tokens"] = token_row["output_tokens"] or 0
+
+            session_metadata = {}
+            if row["session_metadata"]:
+                try:
+                    session_metadata = json.loads(row["session_metadata"])
+                except Exception:
+                    pass
+
+            # Gather verbose context
+            event_timeline = await _fetch_event_timeline(db, session_id, event_id)
+            tool_breakdown = await _fetch_tool_breakdown(db, session_id)
+            model_breakdown = await _fetch_model_breakdown(db, session_id)
+            latency_stats = await _fetch_latency_stats(db, session_id)
+            related_issues = await _fetch_related_issues(db, session_id, issue_id)
+            historical_frequency = await _fetch_historical_frequency(db, rule_id)
+            session_start_time = await _fetch_session_start(db, session_id)
+
+            rule_config_snapshot = {}
+            if row["rule_config_snapshot"]:
+                try:
+                    rule_config_snapshot = json.loads(row["rule_config_snapshot"])
+                except Exception:
+                    pass
+        finally:
+            await db.close()
+
+        ctx = RCAContext(
+            rule_id=rule_id,
+            rule_description=row["rule_description"] or "",
+            issue_category=row["issue_type"],
+            severity=row["severity"],
+            triggering_events=triggering_events,
+            session_aggregates=session_aggregates,
+            session_metadata=session_metadata,
+            session_start_time=session_start_time,
+            event_timeline=event_timeline,
+            tool_breakdown=tool_breakdown,
+            model_breakdown=model_breakdown,
+            latency_stats=latency_stats,
+            related_issues=related_issues,
+            historical_frequency=historical_frequency,
+            rule_config_snapshot=rule_config_snapshot,
+        )
+
+        # 2. Call LLM (DB is closed)
+        prompt = build_rca_prompt(ctx, custom_prompt, redact_content=config.redact_content)
+        rca_text = await backend.analyze(ctx, prompt=prompt, max_tokens=config.max_tokens)
+
+        # 3. Try to parse structured output
+        rca_structured = None
+        try:
+            if "```json" in rca_text:
+                json_start = rca_text.index("```json") + 7
+                json_end = rca_text.index("```", json_start)
+                rca_structured = rca_text[json_start:json_end].strip()
+            elif "```" in rca_text:
+                parts = rca_text.split("```")
+                if len(parts) >= 3:
+                    rca_structured = parts[-2].strip()
+        except Exception:
+            pass
+
+        # 4. Reopen DB to update issue
+        db = await _open_db()
+        try:
+            await db.execute(
+                "UPDATE issues SET rca_status = 'done', rca_text = ?, rca_structured = ? WHERE issue_id = ?",
+                (rca_text, rca_structured, issue_id),
+            )
+            await db.commit()
+            print(f"[tracea] RCA completed for issue {issue_id}")
+        finally:
+            await db.close()
+
+    except Exception as e:
+        print(f"[tracea] RCA failed for issue {issue_id}: {e}")
+        db = await _open_db()
+        try:
+            await db.execute(
+                "UPDATE issues SET rca_status = 'failed' WHERE issue_id = ?",
+                (issue_id,),
+            )
+            await db.commit()
+        finally:
+            await db.close()
+
+
 async def _rca_worker_loop() -> None:
     """Poll for pending issues, run RCA, update status to done or failed."""
     global _stop_event
-
-    from tracea.server.db import get_db
 
     while True:
         if _stop_event and _stop_event.is_set():
@@ -232,137 +382,21 @@ async def _rca_worker_loop() -> None:
         custom_prompt = load_custom_prompt(config.prompt_path)
 
         try:
-            db_gen = get_db()
-            db = await db_gen.__anext__()
-
-            # Fetch pending issues
-            cursor = await db.execute(
-                "SELECT * FROM issues WHERE rca_status = 'pending' ORDER BY detected_at ASC LIMIT 5"
-            )
-            rows = await cursor.fetchall()
+            db = await _open_db()
+            try:
+                # Fetch pending issues
+                cursor = await db.execute(
+                    "SELECT * FROM issues WHERE rca_status = 'pending' ORDER BY detected_at ASC LIMIT 5"
+                )
+                rows = await cursor.fetchall()
+            finally:
+                await db.close()
 
             for row in rows:
-                issue_id = row["issue_id"]
                 try:
-                    session_id = row["session_id"]
-                    event_id = row["event_id"]
-                    rule_id = row["rule_id"] or ""
-
-                    # Parse captured_values JSON
-                    captured = json.loads(row["captured_values"] or "{}")
-
-                    # Get triggering event data
-                    event_cursor = await db.execute(
-                        "SELECT type, error, cost_usd, duration_ms, tool_name, model, sequence "
-                        "FROM events WHERE event_id = ?",
-                        (event_id,),
-                    )
-                    event_row = await event_cursor.fetchone()
-                    triggering_events = []
-                    if event_row:
-                        triggering_events = [{
-                            "type": event_row["type"] or "",
-                            "error": event_row["error"] or "",
-                            "cost_usd": event_row["cost_usd"] or 0,
-                            "duration_ms": event_row["duration_ms"] or 0,
-                            "tool_name": event_row["tool_name"] or "",
-                            "model": event_row["model"] or "",
-                            "sequence": event_row["sequence"] or 0,
-                        }]
-
-                    session_aggregates = {
-                        "cost_usd": row["session_cost_total"] or 0,
-                        "duration_ms": row["session_duration_ms"] or 0,
-                        "event_count": row["session_event_count"] or 0,
-                    }
-
-                    # Add token aggregates if available
-                    token_cursor = await db.execute(
-                        "SELECT SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens "
-                        "FROM events WHERE session_id = ?",
-                        (session_id,),
-                    )
-                    token_row = await token_cursor.fetchone()
-                    if token_row:
-                        session_aggregates["input_tokens"] = token_row["input_tokens"] or 0
-                        session_aggregates["output_tokens"] = token_row["output_tokens"] or 0
-
-                    session_metadata = {}
-                    if row["session_metadata"]:
-                        try:
-                            session_metadata = json.loads(row["session_metadata"])
-                        except Exception:
-                            pass
-
-                    # Gather verbose context
-                    event_timeline = await _fetch_event_timeline(db, session_id, event_id)
-                    tool_breakdown = await _fetch_tool_breakdown(db, session_id)
-                    model_breakdown = await _fetch_model_breakdown(db, session_id)
-                    latency_stats = await _fetch_latency_stats(db, session_id)
-                    related_issues = await _fetch_related_issues(db, session_id, issue_id)
-                    historical_frequency = await _fetch_historical_frequency(db, rule_id)
-                    session_start_time = await _fetch_session_start(db, session_id)
-
-                    rule_config_snapshot = {}
-                    if row["rule_config_snapshot"]:
-                        try:
-                            rule_config_snapshot = json.loads(row["rule_config_snapshot"])
-                        except Exception:
-                            pass
-
-                    ctx = RCAContext(
-                        rule_id=rule_id,
-                        rule_description=row["rule_description"] or "",
-                        issue_category=row["issue_type"],
-                        severity=row["severity"],
-                        triggering_events=triggering_events,
-                        session_aggregates=session_aggregates,
-                        session_metadata=session_metadata,
-                        session_start_time=session_start_time,
-                        event_timeline=event_timeline,
-                        tool_breakdown=tool_breakdown,
-                        model_breakdown=model_breakdown,
-                        latency_stats=latency_stats,
-                        related_issues=related_issues,
-                        historical_frequency=historical_frequency,
-                        rule_config_snapshot=rule_config_snapshot,
-                    )
-
-                    # Call LLM
-                    prompt = build_rca_prompt(ctx, custom_prompt)
-                    rca_text = await backend.analyze(ctx, prompt=prompt, max_tokens=config.max_tokens)
-
-                    # Try to parse structured output
-                    rca_structured = None
-                    try:
-                        # The prompt asks for JSON after the markdown; try to extract it
-                        if "```json" in rca_text:
-                            json_start = rca_text.index("```json") + 7
-                            json_end = rca_text.index("```", json_start)
-                            rca_structured = rca_text[json_start:json_end].strip()
-                        elif "```" in rca_text:
-                            # Try last code block
-                            parts = rca_text.split("```")
-                            if len(parts) >= 3:
-                                rca_structured = parts[-2].strip()
-                    except Exception:
-                        pass
-
-                    # Update issue
-                    await db.execute(
-                        "UPDATE issues SET rca_status = 'done', rca_text = ?, rca_structured = ? WHERE issue_id = ?",
-                        (rca_text, rca_structured, issue_id),
-                    )
-                    await db.commit()
-                    print(f"[tracea] RCA completed for issue {issue_id}")
-
+                    await _process_issue(backend, config, custom_prompt, row)
                 except Exception as e:
-                    print(f"[tracea] RCA failed for issue {issue_id}: {e}")
-                    await db.execute(
-                        "UPDATE issues SET rca_status = 'failed' WHERE issue_id = ?",
-                        (issue_id,),
-                    )
-                    await db.commit()
+                    print(f"[tracea] Unexpected error processing issue {row['issue_id']}: {e}")
 
         except Exception as e:
             print(f"[tracea] RCAWorker poll error: {e}")

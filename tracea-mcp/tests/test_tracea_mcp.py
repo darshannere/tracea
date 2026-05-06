@@ -251,7 +251,7 @@ def test_full_mcp_handshake(mcp_server):
     # 3. List tools
     tools_resp = client.send("tools/list")
     tool_names = [t["name"] for t in tools_resp["result"]["tools"]]
-    assert set(tool_names) == {"Bash", "Read", "Write", "Edit", "Glob", "Grep"}
+    assert set(tool_names) == {"Bash", "Read", "Write", "Edit", "Glob", "Grep", "brain"}
 
     # 4. Execute Read tool (use /etc/hosts which exists on all Unix systems)
     read_resp = client.send("tools/call", {

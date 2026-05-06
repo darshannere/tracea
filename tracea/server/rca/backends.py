@@ -12,15 +12,21 @@ class RCABackend(ABC):
     """Abstract RCA backend. All methods are async."""
 
     @abstractmethod
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
-        """Returns RCA text content, or raises on failure."""
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
+        """Returns RCA text content, or raises on failure.
+
+        Args:
+            json_mode: If True, request structured JSON output from the LLM.
+                       Not all backends support this natively; unsupported
+                       backends fall back to standard text output.
+        """
         ...
 
 
 class DisabledBackend(RCABackend):
     """No-op backend. Always returns empty string."""
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         return ""
 
 
@@ -31,20 +37,25 @@ class OllamaBackend(RCABackend):
         self.base_url = base_url.rstrip("/")
         self.model = model or "llama3"
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         """Call Ollama via OpenAI-compatible chat completions endpoint."""
+        body: dict = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "You are a DevOps root-cause analyst."},
+                {"role": "user", "content": prompt or ""},
+            ],
+            "stream": False,
+            "max_tokens": max_tokens,
+        }
+        # Ollama (via OpenAI compat) may not fully support json_mode;
+        # include it if requested but don't fail if unsupported.
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": "You are a DevOps root-cause analyst."},
-                        {"role": "user", "content": prompt or ""},
-                    ],
-                    "stream": False,
-                    "max_tokens": max_tokens,
-                },
+                json=body,
             )
             response.raise_for_status()
             data = response.json()
@@ -58,8 +69,19 @@ class OpenAIBackend(RCABackend):
         self.model = model or "gpt-4o"
         self.api_key = api_key
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         """Call OpenAI chat completions API."""
+        body: dict = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "You are a DevOps root-cause analyst."},
+                {"role": "user", "content": prompt or ""},
+            ],
+            "stream": False,
+            "max_tokens": max_tokens,
+        }
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -67,15 +89,7 @@ class OpenAIBackend(RCABackend):
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": "You are a DevOps root-cause analyst."},
-                        {"role": "user", "content": prompt or ""},
-                    ],
-                    "stream": False,
-                    "max_tokens": max_tokens,
-                },
+                json=body,
             )
             response.raise_for_status()
             data = response.json()
@@ -90,8 +104,20 @@ class AnthropicBackend(RCABackend):
         self.api_key = api_key
         self.base_url = (base_url or "https://api.anthropic.com").rstrip("/")
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048) -> str:
+    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         """Call Anthropic messages API."""
+        body: dict = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "user", "content": prompt or ""},
+            ],
+        }
+        # Anthropic supports a beta headers approach for structured output;
+        # for now we include the instruction in the prompt itself and do
+        # not set a native json_mode param, relying on markdown extraction.
+        # TODO: adopt Anthropic's native structured output when stable.
+        _ = json_mode  # acknowledged but not used natively yet
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/messages",
@@ -100,13 +126,7 @@ class AnthropicBackend(RCABackend):
                     "anthropic-version": "2023-06-01",
                     "Content-Type": "application/json",
                 },
-                json={
-                    "model": self.model,
-                    "max_tokens": max_tokens,
-                    "messages": [
-                        {"role": "user", "content": prompt or ""},
-                    ],
-                },
+                json=body,
             )
             response.raise_for_status()
             data = response.json()

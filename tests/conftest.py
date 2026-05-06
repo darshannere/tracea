@@ -1,8 +1,21 @@
 import pytest
 import asyncio
+import os
 from tracea.server.models import TracedEvent, EventBatch
+from tracea.server.db import init_db, close_db
 from datetime import datetime
 from uuid import uuid4
+
+
+@pytest.fixture(autouse=True)
+def fresh_db(tmp_path, monkeypatch):
+    """Initialize a fresh in-memory database for each test."""
+    db_file = tmp_path / "tracea_test.db"
+    monkeypatch.setattr("tracea.server.db.DB_PATH", str(db_file))
+    monkeypatch.setattr("tracea.server.db._db", None)
+    asyncio.run(init_db())
+    yield
+    asyncio.run(close_db())
 
 
 @pytest.fixture

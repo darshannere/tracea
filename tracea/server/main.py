@@ -9,7 +9,8 @@ from tracea.server.db import init_db, close_db, get_db
 from tracea.server.detection.watcher import start_watching, stop_watching
 from tracea.server.alerts.watcher import start_watching as start_alerts_watching, stop_watching as stop_alerts_watching
 from tracea.server.alerts.dispatcher import start_dispatcher, stop_dispatcher
-from tracea.server.rca.worker import start_worker, stop_worker
+from tracea.server.rca.worker import start_worker as start_rca_worker, stop_worker as stop_rca_worker
+from tracea.server.brain.synthesizer import start_worker as start_brain_worker, stop_worker as stop_brain_worker
 
 start_time = time.time()
 _retention_task: asyncio.Task | None = None
@@ -45,14 +46,16 @@ async def lifespan(app: FastAPI):
     await start_watching()
     await start_alerts_watching()   # alerts.yaml watcher
     await start_dispatcher()       # AlertDispatcher
-    await start_worker()          # RCAWorker
+    await start_rca_worker()      # RCAWorker
+    await start_brain_worker()    # Brain Synthesizer
     yield
     if _retention_task:
         _retention_task.cancel()
     await stop_watching()
     await stop_alerts_watching()   # alerts.yaml watcher
     await stop_dispatcher()        # AlertDispatcher
-    await stop_worker()           # RCAWorker
+    await stop_rca_worker()       # RCAWorker
+    await stop_brain_worker()     # Brain Synthesizer
     await close_db()
 
 
@@ -78,6 +81,7 @@ from tracea.server.routes.issues import router as issues_router
 from tracea.server.routes.config import router as config_router
 from tracea.server.routes.agents import router as agents_router
 from tracea.server.routes.observagent import router as observagent_router
+from tracea.server.routes.brain import router as brain_router
 
 app.include_router(ingest_router)
 app.include_router(sessions_router)
@@ -85,6 +89,7 @@ app.include_router(issues_router)
 app.include_router(config_router)
 app.include_router(agents_router)
 app.include_router(observagent_router)
+app.include_router(brain_router)
 
 
 def create_app() -> FastAPI:

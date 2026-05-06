@@ -6,18 +6,6 @@ import asyncio
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 from tracea.server.main import app
-from tracea.server.db import init_db, close_db
-
-
-@pytest.fixture(autouse=True)
-def fresh_db(tmp_path, monkeypatch):
-    """Initialize a fresh in-memory database for each test."""
-    db_file = tmp_path / "tracea_test.db"
-    monkeypatch.setattr("tracea.server.db.DB_PATH", str(db_file))
-    monkeypatch.setattr("tracea.server.db._db", None)
-    asyncio.run(init_db())
-    yield
-    asyncio.run(close_db())
 
 
 @pytest.fixture

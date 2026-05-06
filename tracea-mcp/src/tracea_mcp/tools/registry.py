@@ -6,6 +6,7 @@ from tracea_mcp.tools.write import WriteTool
 from tracea_mcp.tools.edit import EditTool
 from tracea_mcp.tools.glob import GlobTool
 from tracea_mcp.tools.grepc import GrepTool
+from tracea_mcp.tools.brain import BrainTool
 
 
 class ToolRegistry:
@@ -23,6 +24,7 @@ class ToolRegistry:
             EditTool(),
             GlobTool(),
             GrepTool(),
+            BrainTool(),
         ]:
             self._tools[tool.name] = tool
 

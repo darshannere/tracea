@@ -61,3 +61,41 @@ async def get_rca_config() -> dict:
         "max_tokens": int(values.get("TRACEA_RCA_MAX_TOKENS") or "2048"),
         "api_key": values.get("OPENAI_API_KEY") or values.get("ANTHROPIC_API_KEY") or "",
     }
+
+
+async def get_brain_config() -> dict:
+    """Load brain synthesis config from DB settings, falling back to env vars.
+
+    Reuses RCA LLM backend settings by default. Brain-specific overrides
+    use TRACEA_BRAIN_* prefix.
+    """
+    keys = [
+        "TRACEA_BRAIN_BACKEND",
+        "TRACEA_BRAIN_MODEL",
+        "TRACEA_BRAIN_BASE_URL",
+        "TRACEA_BRAIN_PROMPT_PATH",
+        "TRACEA_BRAIN_MAX_TOKENS",
+        "TRACEA_BRAIN_ENABLED",
+        "TRACEA_RCA_BACKEND",
+        "TRACEA_RCA_MODEL",
+        "TRACEA_RCA_BASE_URL",
+        "TRACEA_RCA_MAX_TOKENS",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+    ]
+    values = {}
+    for key in keys:
+        values[key] = await get_setting(key)
+
+    # Brain defaults to RCA settings if not explicitly configured
+    backend = values.get("TRACEA_BRAIN_BACKEND") or values.get("TRACEA_RCA_BACKEND") or "disabled"
+    enabled = (values.get("TRACEA_BRAIN_ENABLED") or "true").lower() == "true"
+    return {
+        "enabled": enabled,
+        "backend": backend,
+        "model": values.get("TRACEA_BRAIN_MODEL") or values.get("TRACEA_RCA_MODEL") or "",
+        "base_url": values.get("TRACEA_BRAIN_BASE_URL") or values.get("TRACEA_RCA_BASE_URL") or "",
+        "prompt_path": values.get("TRACEA_BRAIN_PROMPT_PATH") or "",
+        "max_tokens": int(values.get("TRACEA_BRAIN_MAX_TOKENS") or values.get("TRACEA_RCA_MAX_TOKENS") or "2048"),
+        "api_key": values.get("OPENAI_API_KEY") or values.get("ANTHROPIC_API_KEY") or "",
+    }

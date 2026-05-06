@@ -38,3 +38,8 @@ import_kimi_logs.py
 .claude/
 .vscode/
 .idea/
+.DS_Store
+*-current.md
+*-state.md
+live-page.md
+live-reverted.md

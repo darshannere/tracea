@@ -3,6 +3,7 @@
 import json
 
 from tracea.server.rca.models import RCAContext
+from tracea.server.redaction import redact
 
 DEFAULT_PROMPT = """You are a DevOps root-cause analyst specializing in AI agent observability. Given the following comprehensive issue context, produce a thorough root-cause analysis.
 
@@ -86,8 +87,15 @@ After your analysis, output a structured JSON block (wrapped in ```json) with th
 """
 
 
-def build_rca_prompt(context: RCAContext, prompt_template: str | None = None) -> str:
-    """Build the prompt string from context and optional custom template."""
+def build_rca_prompt(context: RCAContext, prompt_template: str | None = None, redact_content: bool = True) -> str:
+    """Build the prompt string from context and optional custom template.
+
+    Args:
+        context: The RCA context model.
+        prompt_template: Optional custom prompt template string.
+        redact_content: If True (default), redact secrets from event data before
+            building the prompt. Uses tracea.server.redaction.redact().
+    """
     template = prompt_template or DEFAULT_PROMPT
 
     # Format triggering events
@@ -157,12 +165,23 @@ def build_rca_prompt(context: RCAContext, prompt_template: str | None = None) ->
         f"- Affected {hf.get('affected_sessions', 0)} unique sessions",
     ]
 
+    triggering_events_str = "\n".join(events_lines) or "(none)"
+    timeline_str = "\n".join(timeline_lines) or "(none)"
+    rule_snapshot_str = json.dumps(context.rule_config_snapshot, indent=2) if context.rule_config_snapshot else "(none)"
+    session_meta_str = json.dumps(context.session_metadata, indent=2) if context.session_metadata else "(none)"
+
+    if redact_content:
+        triggering_events_str = redact(triggering_events_str)
+        timeline_str = redact(timeline_str)
+        rule_snapshot_str = redact(rule_snapshot_str)
+        session_meta_str = redact(session_meta_str)
+
     return template.format(
         rule_id=context.rule_id,
         rule_description=context.rule_description,
         issue_category=context.issue_category,
         severity=context.severity,
-        triggering_events="\n".join(events_lines) or "(none)",
+        triggering_events=triggering_events_str,
         cost_usd=context.session_aggregates.get("cost_usd", 0),
         duration_ms=context.session_aggregates.get("duration_ms", 0),
         event_count=context.session_aggregates.get("event_count", 0),
@@ -172,11 +191,11 @@ def build_rca_prompt(context: RCAContext, prompt_template: str | None = None) ->
         latency_stats="\n".join(latency_lines),
         tool_breakdown="\n".join(tool_lines),
         model_breakdown="\n".join(model_lines),
-        event_timeline="\n".join(timeline_lines) or "(none)",
+        event_timeline=timeline_str,
         related_issues="\n".join(related_lines),
         historical_frequency="\n".join(hist_lines),
-        rule_config_snapshot=json.dumps(context.rule_config_snapshot, indent=2) if context.rule_config_snapshot else "(none)",
-        session_metadata=json.dumps(context.session_metadata, indent=2) if context.session_metadata else "(none)",
+        rule_config_snapshot=rule_snapshot_str,
+        session_metadata=session_meta_str,
     )
 
 
