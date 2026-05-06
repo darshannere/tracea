@@ -165,7 +165,7 @@ export function InsightsPanel() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Tab bar */}
-      <div className="flex border-b border-zinc-200 shrink-0">
+      <div className="flex border-b border-border shrink-0">
         {TABS.map((tab) => (
           <button
             key={tab}
@@ -174,7 +174,7 @@ export function InsightsPanel() {
               'px-4 py-2 text-xs font-medium transition-colors',
               activeTab === tab
                 ? 'border-b-2 border-accent text-accent'
-                : 'text-zinc-500 hover:text-zinc-800'
+                : 'text-muted-foreground hover:text-foreground'
             )}
           >
             {tab === 'Health' && stalledCount > 0 ? `Health (${stalledCount})` : tab}
@@ -247,7 +247,7 @@ export function InsightsPanel() {
                 <div className="grid grid-cols-3 gap-3">
                   <StatBox label="p50" value={`${latency.p50}ms`} color="text-emerald-500" />
                   <StatBox label="p95" value={`${latency.p95}ms`} color="text-amber-500" />
-                  <StatBox label="samples" value={`${latency.count}`} color="text-zinc-800" />
+                  <StatBox label="samples" value={`${latency.count}`} color="text-foreground" />
                 </div>
               )}
             </ChartSection>
@@ -257,11 +257,11 @@ export function InsightsPanel() {
         {activeTab === 'Activity' && (
           <>
             {latestSessionId ? (
-              <p className="text-xs text-zinc-500 mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 Session: {latestSessionId.slice(0, 8)}
               </p>
             ) : (
-              <p className="text-xs text-zinc-500">No active session yet.</p>
+              <p className="text-xs text-muted-foreground">No active session yet.</p>
             )}
 
             {latestSessionId && (
@@ -296,7 +296,7 @@ export function InsightsPanel() {
                   }} /> : tokensData.length === 0 ? <NoData /> : (
                     <>
                       <div className="h-[140px]">
-                        <p className="text-[10px] text-zinc-500 mb-1">Input Tokens</p>
+                        <p className="text-[10px] text-muted-foreground mb-1">Input Tokens</p>
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={tokensData} margin={{ top: 4, right: 8, bottom: 20, left: 0 }}>
                             {GRID}
@@ -308,7 +308,7 @@ export function InsightsPanel() {
                         </ResponsiveContainer>
                       </div>
                       <div className="h-[140px]">
-                        <p className="text-[10px] text-zinc-500 mb-1">Output Tokens</p>
+                        <p className="text-[10px] text-muted-foreground mb-1">Output Tokens</p>
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={tokensData} margin={{ top: 4, right: 8, bottom: 20, left: 0 }}>
                             {GRID}
@@ -352,10 +352,10 @@ export function InsightsPanel() {
                     const startTime = new Date(agent.last_activity_ts).toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit', hour12: false })
                     const displayName = agent.agent_type || agent.agent_id.slice(0, 8)
                     return (
-                      <div key={agent.agent_id} className="rounded border border-zinc-200 p-2 flex items-center justify-between gap-2">
+                      <div key={agent.agent_id} className="rounded border border-border p-2 flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs font-medium text-zinc-700 truncate">{displayName}</p>
-                          <p className="text-[10px] text-zinc-400">last active {startTime}</p>
+                          <p className="text-xs font-medium text-foreground truncate">{displayName}</p>
+                          <p className="text-[10px] text-muted-foreground/60">last active {startTime}</p>
                         </div>
                         <div className="text-xs font-mono text-amber-500 shrink-0">{idleLabel}</div>
                       </div>
@@ -449,7 +449,7 @@ function cn(...classes: (string | false | undefined)[]) {
 function ChartSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h3 className="text-xs font-semibold text-zinc-500 uppercase tracking-wide mb-2">
+      <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
         {title}
       </h3>
       {children}
@@ -458,16 +458,16 @@ function ChartSection({ title, children }: { title: string; children: React.Reac
 }
 
 function Skeleton({ height = 160 }: { height?: number }) {
-  return <div style={{ height }} className="animate-pulse bg-zinc-100 rounded" />
+  return <div style={{ height }} className="animate-pulse bg-muted rounded" />
 }
 
 function NoData({ text = 'No data yet' }: { text?: string }) {
-  return <p className="text-xs text-zinc-400">{text}</p>
+  return <p className="text-xs text-muted-foreground/60">{text}</p>
 }
 
 function Retry({ onClick }: { onClick: () => void }) {
   return (
-    <p className="text-xs text-zinc-400">
+    <p className="text-xs text-muted-foreground/60">
       Failed to load —{' '}
       <button className="underline text-accent" onClick={onClick}>retry?</button>
     </p>
@@ -476,9 +476,9 @@ function Retry({ onClick }: { onClick: () => void }) {
 
 function StatBox({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div className="rounded border border-zinc-200 p-2 text-center">
+    <div className="rounded border border-border p-2 text-center">
       <div className={cn('text-lg font-mono font-semibold', color)}>{value}</div>
-      <div className="text-[10px] text-zinc-400">{label}</div>
+      <div className="text-[10px] text-muted-foreground/60">{label}</div>
     </div>
   )
 }

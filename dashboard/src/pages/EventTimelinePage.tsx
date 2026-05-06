@@ -134,10 +134,10 @@ export function EventTimelinePage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <AlertCircle className="h-8 w-8 mb-2" />
         <p className="text-sm">Failed to load data</p>
-        <p className="text-xs text-zinc-400">Retrying in 5 seconds...</p>
+        <p className="text-xs text-muted-foreground/60">Retrying in 5 seconds...</p>
       </div>
     )
   }
@@ -146,39 +146,39 @@ export function EventTimelinePage() {
     <div className="space-y-6">
       <Link
         to="/sessions"
-        className="inline-flex items-center gap-1.5 text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="h-4 w-4" />
         Back to Sessions
       </Link>
 
       {session && (
-        <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4 grid grid-cols-5 gap-4 text-sm">
+        <div className="bg-muted/50 border border-border rounded-lg p-4 grid grid-cols-5 gap-4 text-sm">
           <div>
-            <div className="text-xs text-zinc-500 mb-1">Session ID</div>
-            <div className="font-mono text-xs text-zinc-700">{session.session_id?.slice(0, 12)}...</div>
+            <div className="text-xs text-muted-foreground mb-1">Session ID</div>
+            <div className="font-mono text-xs text-foreground">{session.session_id?.slice(0, 12)}...</div>
           </div>
           <div>
-            <div className="text-xs text-zinc-500 mb-1">Started</div>
-            <div className="text-zinc-700">{session.started_at ? new Date(session.started_at).toLocaleString() : '-'}</div>
+            <div className="text-xs text-muted-foreground mb-1">Started</div>
+            <div className="text-foreground">{session.started_at ? new Date(session.started_at).toLocaleString() : '-'}</div>
           </div>
           <div>
-            <div className="text-xs text-zinc-500 mb-1">Duration</div>
-            <div className="text-zinc-700 flex items-center gap-1">
+            <div className="text-xs text-muted-foreground mb-1">Duration</div>
+            <div className="text-foreground flex items-center gap-1">
               <Clock className="h-3 w-3" />
               {session.duration_ms != null ? `${(session.duration_ms / 1000).toFixed(1)}s` : '-'}
             </div>
           </div>
           <div>
-            <div className="text-xs text-zinc-500 mb-1">Total Cost</div>
-            <div className="text-zinc-700 flex items-center gap-1">
+            <div className="text-xs text-muted-foreground mb-1">Total Cost</div>
+            <div className="text-foreground flex items-center gap-1">
               <DollarSign className="h-3 w-3" />
               {session.total_cost?.toFixed(4) ?? '-'}
             </div>
           </div>
           <div>
-            <div className="text-xs text-zinc-500 mb-1">Total Tokens</div>
-            <div className="text-zinc-700 flex items-center gap-1">
+            <div className="text-xs text-muted-foreground mb-1">Total Tokens</div>
+            <div className="text-foreground flex items-center gap-1">
               <Hash className="h-3 w-3" />
               {session.total_tokens?.toLocaleString() ?? '-'}
             </div>
@@ -190,16 +190,16 @@ export function EventTimelinePage() {
         <h2 className="text-xl font-semibold">Event Timeline</h2>
         <Popover.Root open={filterOpen} onOpenChange={setFilterOpen}>
           <Popover.Trigger asChild>
-            <button className="text-sm text-zinc-600 hover:text-zinc-900 border border-zinc-300 rounded-md px-3 py-1.5 flex items-center gap-2 transition-colors">
+            <button className="text-sm text-muted-foreground hover:text-foreground border border-input rounded-md px-3 py-1.5 flex items-center gap-2 transition-colors">
               Filter
-              <span className="text-xs bg-zinc-100 rounded px-1.5 py-0.5">
+              <span className="text-xs bg-muted rounded px-1.5 py-0.5">
                 {filterTypes.size}/{ALL_EVENT_TYPES.length}
               </span>
             </button>
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content
-              className="relative bg-white border border-zinc-200 rounded-lg shadow-lg p-3 min-w-48 z-50"
+              className="relative bg-white border border-border rounded-lg shadow-lg p-3 min-w-48 z-50"
               sideOffset={4}
             >
               <div className="space-y-2">
@@ -209,13 +209,13 @@ export function EventTimelinePage() {
                       type="checkbox"
                       checked={filterTypes.has(type)}
                       onChange={() => toggleType(type)}
-                      className="rounded border-zinc-300"
+                      className="rounded border-input"
                     />
                     {EVENT_TYPE_LABELS[type]}
                   </label>
                 ))}
               </div>
-              <Popover.Close className="absolute top-2 right-2 text-zinc-400 hover:text-zinc-600">
+              <Popover.Close className="absolute top-2 right-2 text-muted-foreground/60 hover:text-muted-foreground">
                 ✕
               </Popover.Close>
             </Popover.Content>
@@ -224,20 +224,20 @@ export function EventTimelinePage() {
       </div>
 
       {filteredEvents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 text-zinc-500">
+        <div className="flex flex-col items-center justify-center h-48 text-muted-foreground">
           <Clock className="h-8 w-8 mb-2" />
           <p className="text-sm font-medium">No events in this session</p>
-          <p className="text-xs text-zinc-400">Events will appear here once the session has activity</p>
+          <p className="text-xs text-muted-foreground/60">Events will appear here once the session has activity</p>
         </div>
       ) : (
-        <div className="border border-zinc-200 rounded-lg overflow-hidden">
+        <div className="border border-border rounded-lg overflow-hidden">
           <table className="w-full text-sm">
-            <thead className="bg-zinc-50 border-b border-zinc-200">
+            <thead className="bg-muted/50 border-b border-border">
               <tr>
-                <th className="text-left px-4 py-3 font-medium text-zinc-600 w-8"></th>
-                <th className="text-left px-4 py-3 font-medium text-zinc-600">Type</th>
-                <th className="text-left px-4 py-3 font-medium text-zinc-600">Time</th>
-                <th className="text-left px-4 py-3 font-medium text-zinc-600">Details</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground w-8"></th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Type</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Time</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Details</th>
               </tr>
             </thead>
             <tbody>
@@ -245,22 +245,22 @@ export function EventTimelinePage() {
                 const Icon = EVENT_TYPE_ICONS[event.event_type as EventType] ?? Clock
                 const keyFields = getKeyFields(event)
                 return (
-                  <tr key={event.event_id} className="border-b border-zinc-100 hover:bg-zinc-50 transition-colors">
+                  <tr key={event.event_id} className="border-b border-border/50 hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-3">
                       <Icon className={cn(
                         'h-4 w-4',
                         event.event_type === 'error' ? 'text-red-500' :
                           event.event_type === 'session_start' ? 'text-green-500' :
-                            event.event_type === 'session_end' ? 'text-zinc-400' : 'text-accent'
+                            event.event_type === 'session_end' ? 'text-muted-foreground/60' : 'text-accent'
                       )} />
                     </td>
-                    <td className="px-4 py-3 text-zinc-700 font-medium">
+                    <td className="px-4 py-3 text-foreground font-medium">
                       {EVENT_TYPE_LABELS[event.event_type as EventType] ?? event.event_type}
                     </td>
-                    <td className="px-4 py-3 text-zinc-500 text-xs">
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
                       {formatTimestamp(event.timestamp)}
                     </td>
-                    <td className="px-4 py-3 text-zinc-600 text-xs">
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
                       {event.event_type === 'chat.completion' && (
                         <span>
                           {keyFields.model} · {keyFields.tokens?.toLocaleString()} tokens · ${Number(keyFields.cost ?? 0).toFixed(4)}
@@ -285,7 +285,7 @@ export function EventTimelinePage() {
                         </span>
                       )}
                       {(event.event_type === 'session_start' || event.event_type === 'session_end') && (
-                        <span className="text-zinc-400">-</span>
+                        <span className="text-muted-foreground/60">-</span>
                       )}
                     </td>
                   </tr>

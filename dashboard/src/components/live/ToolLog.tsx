@@ -45,7 +45,7 @@ export function ToolLog() {
       ))}
 
       {filtered.length === 0 && (
-        <div className="flex items-center justify-center h-full text-zinc-400 text-xs py-8">
+        <div className="flex items-center justify-center h-full text-muted-foreground/60 text-xs py-8">
           {activeAgentFilter
             ? 'No events for selected agent yet...'
             : activeSessionFilter

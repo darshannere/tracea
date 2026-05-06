@@ -52,7 +52,7 @@ export function TeamPage() {
         <div className="flex items-center gap-3">
           <Users className="h-5 w-5 text-accent" />
           <h2 className="text-xl font-semibold">Team</h2>
-          <span className="text-sm text-zinc-500">{users.length} members</span>
+          <span className="text-sm text-muted-foreground">{users.length} members</span>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -65,16 +65,16 @@ export function TeamPage() {
 
       {/* Users table */}
       {users.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-zinc-500 border border-dashed border-zinc-300 rounded-lg">
+        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground border border-dashed border-input rounded-lg">
           <Users className="h-8 w-8 mb-2" />
           <p className="text-sm font-medium">No team members yet</p>
-          <p className="text-xs text-zinc-400">Add members to filter sessions by user</p>
+          <p className="text-xs text-muted-foreground/60">Add members to filter sessions by user</p>
         </div>
       ) : (
-        <div className="border border-zinc-200 rounded-lg overflow-hidden bg-white">
+        <div className="border border-border rounded-lg overflow-hidden bg-white">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-zinc-50 text-zinc-500 text-xs uppercase tracking-wide">
+              <tr className="bg-muted/50 text-muted-foreground text-xs uppercase tracking-wide">
                 <th className="text-left px-4 py-2.5 font-medium">User ID</th>
                 <th className="text-left px-4 py-2.5 font-medium">Name</th>
                 <th className="text-left px-4 py-2.5 font-medium">Email</th>
@@ -84,17 +84,17 @@ export function TeamPage() {
             </thead>
             <tbody>
               {users.map((u) => (
-                <tr key={u.user_id} className="border-t border-zinc-100 hover:bg-zinc-50">
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-700">{u.user_id}</td>
-                  <td className="px-4 py-3 text-zinc-700">{u.name || '—'}</td>
-                  <td className="px-4 py-3 text-zinc-500">{u.email || '—'}</td>
-                  <td className="px-4 py-3 text-zinc-400 text-xs">
+                <tr key={u.user_id} className="border-t border-border/50 hover:bg-muted/50">
+                  <td className="px-4 py-3 font-mono text-xs text-foreground">{u.user_id}</td>
+                  <td className="px-4 py-3 text-foreground">{u.name || '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{u.email || '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground/60 text-xs">
                     {u.created_at ? new Date(u.created_at).toLocaleDateString() : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => handleDelete(u.user_id)}
-                      className="text-zinc-400 hover:text-red-500 transition-colors"
+                      className="text-muted-foreground/60 hover:text-red-500 transition-colors"
                       title="Remove"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -113,39 +113,39 @@ export function TeamPage() {
           <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Add Team Member</h3>
-              <button onClick={() => setShowModal(false)} className="text-zinc-400 hover:text-zinc-600">
+              <button onClick={() => setShowModal(false)} className="text-muted-foreground/60 hover:text-muted-foreground">
                 <X className="h-5 w-5" />
               </button>
             </div>
             <form onSubmit={handleAdd} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">User ID</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">User ID</label>
                 <input
                   type="text"
                   value={form.user_id}
                   onChange={(e) => setForm({ ...form, user_id: e.target.value })}
-                  className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full text-sm border border-input rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
                   placeholder="e.g. alice"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Name</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Name</label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full text-sm border border-input rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
                   placeholder="e.g. Alice Smith"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-zinc-500 mb-1">Email</label>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">Email</label>
                 <input
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className="w-full text-sm border border-zinc-300 rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full text-sm border border-input rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
                   placeholder="alice@example.com"
                 />
               </div>
@@ -154,7 +154,7 @@ export function TeamPage() {
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-100 rounded-md transition-colors"
+                  className="px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted rounded-md transition-colors"
                 >
                   Cancel
                 </button>

@@ -28,8 +28,8 @@ export function AuthErrorState({
   return (
     <div className="flex flex-col items-center justify-center h-full gap-4 text-center p-8">
       <ShieldAlert size={48} className="text-indigo-500" />
-      <h2 className="text-xl font-semibold text-zinc-800">{heading}</h2>
-      <p className="text-sm text-zinc-500 max-w-sm">{body}</p>
+      <h2 className="text-xl font-semibold text-foreground">{heading}</h2>
+      <p className="text-sm text-muted-foreground max-w-sm">{body}</p>
 
       <div className="w-full max-w-sm flex items-center gap-2 mt-2">
         <Input
@@ -47,9 +47,9 @@ export function AuthErrorState({
           title={visible ? 'Hide' : 'Show'}
         >
           {visible ? (
-            <span className="text-xs text-zinc-500">hide</span>
+            <span className="text-xs text-muted-foreground">hide</span>
           ) : (
-            <span className="text-xs text-zinc-500">show</span>
+            <span className="text-xs text-muted-foreground">show</span>
           )}
         </Button>
         <Button
@@ -62,8 +62,8 @@ export function AuthErrorState({
         </Button>
       </div>
 
-      <p className="text-xs text-zinc-400 mt-1">
-        Find your API key in the server console or <code className="bg-zinc-100 px-1 rounded">data/api_key.txt</code>
+      <p className="text-xs text-muted-foreground/60 mt-1">
+        Find your API key in the server console or <code className="bg-muted px-1 rounded">data/api_key.txt</code>
       </p>
     </div>
   )

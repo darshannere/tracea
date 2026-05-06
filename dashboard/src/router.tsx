@@ -8,6 +8,7 @@ import { IssuesPage } from '@/pages/IssuesPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { LivePage } from '@/pages/LivePage'
 import { TeamPage } from '@/pages/TeamPage'
+import { BrainPage } from '@/pages/BrainPage'
 
 export const router = createHashRouter([
   {
@@ -20,6 +21,7 @@ export const router = createHashRouter([
       { path: 'sessions/:id', element: <EventTimelinePage /> },
       { path: 'agents', element: <AgentsPage /> },
       { path: 'issues', element: <IssuesPage /> },
+      { path: 'brain', element: <BrainPage /> },
       { path: 'live', element: <LivePage /> },
       { path: 'team', element: <TeamPage /> },
       { path: 'settings', element: <SettingsPage /> },

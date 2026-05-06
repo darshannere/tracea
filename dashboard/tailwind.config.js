@@ -7,8 +7,20 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"DM Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+      },
       colors: {
-        accent: '#6366f1',
+        accent: {
+          DEFAULT: '#6366f1',
+          50: '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
@@ -37,6 +49,14 @@ export default {
         card: {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
+        },
+        sidebar: {
+          bg: "hsl(var(--sidebar-bg))",
+          foreground: "hsl(var(--sidebar-foreground))",
+          border: "hsl(var(--sidebar-border))",
+          active: "hsl(var(--sidebar-active))",
+          "active-bg": "hsl(var(--sidebar-active-bg))",
+          hover: "hsl(var(--sidebar-hover))",
         },
       },
       borderRadius: {

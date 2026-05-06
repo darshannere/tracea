@@ -63,9 +63,9 @@ export function AgentBar({ agents, selectedAgent, onSelect }: AgentBarProps) {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
-        <Bot className="h-4 w-4 text-zinc-500" />
-        <span className="text-sm font-semibold text-zinc-700">Agents</span>
-        <span className="text-xs text-zinc-400">{agents.length} active</span>
+        <Bot className="h-4 w-4 text-muted-foreground" />
+        <span className="text-sm font-semibold text-foreground">Agents</span>
+        <span className="text-xs text-muted-foreground/60">{agents.length} active</span>
       </div>
 
       <div className="flex gap-3 overflow-x-auto pb-1">
@@ -74,8 +74,8 @@ export function AgentBar({ agents, selectedAgent, onSelect }: AgentBarProps) {
           className={cn(
             'flex-shrink-0 px-3 py-2 rounded-lg border text-xs font-medium transition-colors',
             selectedAgent === null
-              ? 'border-zinc-400 bg-zinc-100 text-zinc-700'
-              : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50'
+              ? 'border-muted-foreground/40 bg-muted text-foreground'
+              : 'border-border bg-white text-muted-foreground hover:border-input hover:bg-muted/50'
           )}
         >
           All agents
@@ -98,26 +98,26 @@ export function AgentBar({ agents, selectedAgent, onSelect }: AgentBarProps) {
                 'flex-shrink-0 flex flex-col gap-1.5 px-3 py-2 rounded-lg border text-left transition-colors min-w-[160px]',
                 isSelected
                   ? `${color.bg} ${color.border} border-2`
-                  : 'border-zinc-200 bg-white hover:border-zinc-300 hover:bg-zinc-50'
+                  : 'border-border bg-white hover:border-input hover:bg-muted/50'
               )}
             >
               {/* Agent name + platform row */}
               <div className="flex items-center gap-1.5">
                 <span className={cn('h-2 w-2 rounded-full flex-shrink-0', color.dot)} />
-                <span className={cn('text-xs font-mono font-medium truncate max-w-[110px]', isSelected ? color.text : 'text-zinc-700')}>
+                <span className={cn('text-xs font-mono font-medium truncate max-w-[110px]', isSelected ? color.text : 'text-foreground')}>
                   {agent.agent_id}
                 </span>
               </div>
 
               {/* Platform badge */}
               {platformLabel && (
-                <span className="text-xs text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded w-fit">
+                <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit">
                   {platformLabel}
                 </span>
               )}
 
               {/* Stats row */}
-              <div className="flex items-center gap-2 text-xs text-zinc-500">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>{agent.session_count} sess</span>
                 {hasErrors ? (
                   <span className="flex items-center gap-0.5 text-red-500 font-medium">
@@ -127,7 +127,7 @@ export function AgentBar({ agents, selectedAgent, onSelect }: AgentBarProps) {
                 ) : (
                   <span className="text-emerald-600">0% err</span>
                 )}
-                <span className="ml-auto text-zinc-400">{formatRelative(agent.last_active)}</span>
+                <span className="ml-auto text-muted-foreground/60">{formatRelative(agent.last_active)}</span>
               </div>
             </button>
           )

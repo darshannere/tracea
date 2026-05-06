@@ -75,8 +75,8 @@ export function StatCards({ sessions, total }: StatCardsProps) {
       value: `${issueRate.toFixed(1)}%`,
       sub: `${sessionsWithIssues} session${sessionsWithIssues !== 1 ? 's' : ''}`,
       icon: AlertCircle,
-      color: issueRate > 10 ? 'text-rose-600' : 'text-zinc-600',
-      bg: issueRate > 10 ? 'bg-rose-50' : 'bg-zinc-50',
+      color: issueRate > 10 ? 'text-rose-600' : 'text-muted-foreground',
+      bg: issueRate > 10 ? 'bg-rose-50' : 'bg-muted/50',
     },
     {
       label: 'Avg Events / Session',
@@ -92,19 +92,19 @@ export function StatCards({ sessions, total }: StatCardsProps) {
       {stats.map((stat) => (
         <div
           key={stat.label}
-          className="border border-zinc-200 rounded-lg p-3 bg-white"
+          className="border border-border rounded-lg p-3 bg-card"
         >
           <div className="flex items-center gap-2 mb-2">
             <div className={`${stat.bg} rounded-md p-1.5`}>
               <stat.icon className={`h-3.5 w-3.5 ${stat.color}`} />
             </div>
-            <span className="text-xs text-zinc-500 font-medium">{stat.label}</span>
+            <span className="text-xs text-muted-foreground font-medium">{stat.label}</span>
           </div>
-          <div className="text-lg font-semibold text-zinc-900 leading-tight">
+          <div className="text-lg font-semibold text-foreground leading-tight">
             {stat.value}
           </div>
           {stat.sub && (
-            <div className="text-xs text-zinc-400 mt-0.5">{stat.sub}</div>
+            <div className="text-xs text-muted-foreground/60 mt-0.5">{stat.sub}</div>
           )}
         </div>
       ))}

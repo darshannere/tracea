@@ -40,8 +40,8 @@ export function ApiKeyDisplay() {
 
   if (editing) {
     return (
-      <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-        <label className="block text-sm font-medium text-zinc-700 mb-2">API Key</label>
+      <div className="bg-muted/50 border border-border rounded-lg p-4">
+        <label className="block text-sm font-medium text-foreground mb-2">API Key</label>
         <div className="flex items-center gap-2">
           <Input
             type={visible ? 'text' : 'password'}
@@ -57,9 +57,9 @@ export function ApiKeyDisplay() {
             title={visible ? 'Hide' : 'Show'}
           >
             {visible ? (
-              <EyeOff className="h-4 w-4 text-zinc-500" />
+              <EyeOff className="h-4 w-4 text-muted-foreground" />
             ) : (
-              <Eye className="h-4 w-4 text-zinc-500" />
+              <Eye className="h-4 w-4 text-muted-foreground" />
             )}
           </Button>
           <Button
@@ -71,7 +71,7 @@ export function ApiKeyDisplay() {
             Save
           </Button>
         </div>
-        <p className="text-xs text-zinc-500 mt-2">
+        <p className="text-xs text-muted-foreground mt-2">
           Paste the API key from your tracea server console or data/api_key.txt
         </p>
       </div>
@@ -79,10 +79,10 @@ export function ApiKeyDisplay() {
   }
 
   return (
-    <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-4">
-      <label className="block text-sm font-medium text-zinc-700 mb-2">API Key</label>
+    <div className="bg-muted/50 border border-border rounded-lg p-4">
+      <label className="block text-sm font-medium text-foreground mb-2">API Key</label>
       <div className="flex items-center gap-2">
-        <div className="flex-1 flex items-center gap-2 bg-white border border-zinc-300 rounded-md px-3 py-2 text-sm font-mono min-h-[36px]">
+        <div className="flex-1 flex items-center gap-2 bg-white border border-input rounded-md px-3 py-2 text-sm font-mono min-h-[36px]">
           <span className="flex-1 break-all">{displayValue}</span>
         </div>
         <Button
@@ -93,9 +93,9 @@ export function ApiKeyDisplay() {
           disabled={!apiKey}
         >
           {visible ? (
-            <EyeOff className="h-4 w-4 text-zinc-500" />
+            <EyeOff className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <Eye className="h-4 w-4 text-zinc-500" />
+            <Eye className="h-4 w-4 text-muted-foreground" />
           )}
         </Button>
         <Button
@@ -109,7 +109,7 @@ export function ApiKeyDisplay() {
           {copied ? (
             <Check className="h-4 w-4 text-green-600" />
           ) : (
-            <Copy className="h-4 w-4 text-zinc-500" />
+            <Copy className="h-4 w-4 text-muted-foreground" />
           )}
         </Button>
         <Button

@@ -136,12 +136,12 @@ export function DashboardPage() {
       {/* Agents + Issues summary row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Agents panel */}
-        <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+        <div className="border border-border rounded-lg p-4 bg-card">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-zinc-500" />
-              <span className="text-sm font-semibold text-zinc-700">Agents</span>
-              <span className="text-xs text-zinc-400">{agents.length} tracked</span>
+              <Bot className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Agents</span>
+              <span className="text-xs text-muted-foreground/60">{agents.length} tracked</span>
             </div>
             <button
               onClick={() => navigate('/agents')}
@@ -152,7 +152,7 @@ export function DashboardPage() {
           </div>
 
           {agents.length === 0 ? (
-            <p className="text-xs text-zinc-400">No agents recorded yet</p>
+            <p className="text-xs text-muted-foreground/60">No agents recorded yet</p>
           ) : (
             <div className="space-y-2">
               {agents.slice(0, 5).map((agent) => {
@@ -165,22 +165,22 @@ export function DashboardPage() {
                 return (
                   <div
                     key={agent.agent_id}
-                    className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-zinc-50 cursor-pointer"
+                    className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-muted/50 cursor-pointer"
                     onClick={() => navigate('/agents')}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <span className={cn('h-2 w-2 rounded-full flex-shrink-0', color.dot)} />
-                      <span className="text-xs font-mono font-medium text-zinc-700 truncate max-w-[120px]">
+                      <span className="text-xs font-mono font-medium text-foreground truncate max-w-[120px]">
                         {agent.agent_id}
                       </span>
                       {platformLabel && (
-                        <span className="text-xs text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded flex-shrink-0">
+                        <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
                           {platformLabel}
                         </span>
                       )}
                     </div>
                     <div className="flex items-center gap-3 text-xs flex-shrink-0">
-                      <span className="text-zinc-500">{agent.session_count} sess</span>
+                      <span className="text-muted-foreground">{agent.session_count} sess</span>
                       <span className={errorRate > 0 ? 'text-red-500 font-medium' : 'text-emerald-600'}>
                         {errorRate}% err
                       </span>
@@ -191,7 +191,7 @@ export function DashboardPage() {
               {agents.length > 5 && (
                 <button
                   onClick={() => navigate('/agents')}
-                  className="w-full text-xs text-center text-zinc-400 hover:text-accent py-1"
+                  className="w-full text-xs text-center text-muted-foreground/60 hover:text-accent py-1"
                 >
                   +{agents.length - 5} more agents
                 </button>
@@ -201,12 +201,12 @@ export function DashboardPage() {
         </div>
 
         {/* Issues panel */}
-        <div className="border border-zinc-200 rounded-lg p-4 bg-white">
+        <div className="border border-border rounded-lg p-4 bg-card">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 text-zinc-500" />
-              <span className="text-sm font-semibold text-zinc-700">Issues</span>
-              <span className="text-xs text-zinc-400">{issues.length} total</span>
+              <AlertCircle className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Issues</span>
+              <span className="text-xs text-muted-foreground/60">{issues.length} total</span>
             </div>
             <button
               onClick={() => navigate('/issues')}
@@ -254,8 +254,8 @@ export function DashboardPage() {
       {/* Session Health */}
       {sessions.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-            <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+          <div className="border border-border rounded-lg p-4 bg-card">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
               Session Health
             </h4>
             <HealthChart sessions={sessions} />
@@ -263,8 +263,8 @@ export function DashboardPage() {
           </div>
 
           {charts.costSeries.length > 0 && (
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Cost per Day
               </h4>
               <CostChart data={charts.costSeries} />
@@ -277,8 +277,8 @@ export function DashboardPage() {
       {hasChartData && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {charts.tokenSeries.length > 0 && (
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Tokens per Day
               </h4>
               <TokenChart data={charts.tokenSeries} />
@@ -286,8 +286,8 @@ export function DashboardPage() {
           )}
 
           {charts.eventsSeries.length > 0 && (
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Events per Day
               </h4>
               <EventsChart data={charts.eventsSeries} />
@@ -295,8 +295,8 @@ export function DashboardPage() {
           )}
 
           {sessions.length > 0 && (
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Duration Distribution
               </h4>
               <DurationDistributionChart sessions={sessions} />

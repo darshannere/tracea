@@ -283,7 +283,7 @@ export function HealthLegend({ sessions }: HealthChartProps) {
       {items.map((item) => (
         <div key={item.label} className="flex items-center gap-1.5">
           <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-          <span className="text-xs text-zinc-600">
+          <span className="text-xs text-muted-foreground">
             {item.label} ({item.value})
           </span>
         </div>
@@ -310,7 +310,7 @@ export function CostPerSessionChart({ sessions }: CostPerSessionProps) {
 
   if (data.length === 0) {
     return (
-      <div className="h-[160px] flex items-center justify-center text-zinc-400 text-sm">
+      <div className="h-[160px] flex items-center justify-center text-muted-foreground/60 text-sm">
         No cost data to display
       </div>
     )

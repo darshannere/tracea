@@ -58,10 +58,10 @@ export function AgentsPage() {
 
   if (agents.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <Bot className="h-8 w-8 mb-2" />
         <p className="text-sm font-medium">No agents tracked yet</p>
-        <p className="text-xs text-zinc-400">Agents appear automatically when sessions are recorded</p>
+        <p className="text-xs text-muted-foreground/60">Agents appear automatically when sessions are recorded</p>
       </div>
     )
   }
@@ -72,31 +72,31 @@ export function AgentsPage() {
       <div className="flex items-center gap-3">
         <Bot className="h-5 w-5 text-accent" />
         <h2 className="text-xl font-semibold">Agents</h2>
-        <span className="text-sm text-zinc-500">{agents.length} tracked</span>
+        <span className="text-sm text-muted-foreground">{agents.length} tracked</span>
       </div>
 
       {/* Summary row */}
       <div className="grid grid-cols-3 gap-3">
-        <div className="border border-zinc-200 rounded-lg p-3 bg-white">
+        <div className="border border-border rounded-lg p-3 bg-card">
           <div className="flex items-center gap-2 mb-1">
             <Activity className="h-3.5 w-3.5 text-indigo-500" />
-            <span className="text-xs text-zinc-500">Total Sessions</span>
+            <span className="text-xs text-muted-foreground">Total Sessions</span>
           </div>
-          <div className="text-xl font-semibold text-zinc-900">{totalSessions.toLocaleString()}</div>
+          <div className="text-xl font-semibold text-foreground">{totalSessions.toLocaleString()}</div>
         </div>
-        <div className="border border-zinc-200 rounded-lg p-3 bg-white">
+        <div className="border border-border rounded-lg p-3 bg-card">
           <div className="flex items-center gap-2 mb-1">
             <DollarSign className="h-3.5 w-3.5 text-emerald-500" />
-            <span className="text-xs text-zinc-500">Total Cost</span>
+            <span className="text-xs text-muted-foreground">Total Cost</span>
           </div>
-          <div className="text-xl font-semibold text-zinc-900">{formatCost(totalCost)}</div>
+          <div className="text-xl font-semibold text-foreground">{formatCost(totalCost)}</div>
         </div>
-        <div className="border border-zinc-200 rounded-lg p-3 bg-white">
+        <div className="border border-border rounded-lg p-3 bg-card">
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
-            <span className="text-xs text-zinc-500">Error Sessions</span>
+            <span className="text-xs text-muted-foreground">Error Sessions</span>
           </div>
-          <div className="text-xl font-semibold text-zinc-900">{totalErrors.toLocaleString()}</div>
+          <div className="text-xl font-semibold text-foreground">{totalErrors.toLocaleString()}</div>
         </div>
       </div>
 
@@ -113,7 +113,7 @@ export function AgentsPage() {
           return (
             <div
               key={agent.agent_id}
-              className="border border-zinc-200 rounded-lg p-4 bg-white hover:border-zinc-300 hover:shadow-sm transition-all cursor-pointer"
+              className="border border-border rounded-lg p-4 bg-card hover:border-border/80 hover:shadow-sm transition-all cursor-pointer"
               onClick={() => navigate('/sessions', { state: { agent: agent.agent_id } })}
             >
               {/* Agent header */}
@@ -127,24 +127,24 @@ export function AgentsPage() {
                       {agent.agent_id}
                     </div>
                     {platformLabel && (
-                      <span className="text-xs text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                      <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded mt-0.5 inline-block">
                         {platformLabel}
                       </span>
                     )}
                   </div>
                 </div>
-                <ExternalLink className="h-3.5 w-3.5 text-zinc-400 flex-shrink-0 mt-1" />
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground/60 flex-shrink-0 mt-1" />
               </div>
 
               {/* Error/clean bar */}
               <div className="mb-3">
-                <div className="flex justify-between text-xs text-zinc-500 mb-1">
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
                   <span>Health</span>
                   <span className={errorRate > 0 ? 'text-red-500 font-medium' : 'text-emerald-600 font-medium'}>
                     {errorRate.toFixed(0)}% error rate
                   </span>
                 </div>
-                <div className="h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                   <div
                     className="h-full rounded-full bg-emerald-500"
                     style={{ width: `${cleanRate}%` }}
@@ -154,18 +154,18 @@ export function AgentsPage() {
 
               {/* Stats grid */}
               <div className="grid grid-cols-2 gap-2">
-                <div className="text-center py-2 px-3 rounded-md bg-zinc-50">
-                  <div className="text-lg font-semibold text-zinc-900">{agent.session_count}</div>
-                  <div className="text-xs text-zinc-500">Sessions</div>
+                <div className="text-center py-2 px-3 rounded-md bg-muted/50">
+                  <div className="text-lg font-semibold text-foreground">{agent.session_count}</div>
+                  <div className="text-xs text-muted-foreground">Sessions</div>
                 </div>
-                <div className="text-center py-2 px-3 rounded-md bg-zinc-50">
-                  <div className="text-lg font-semibold text-zinc-900">{formatCost(agent.total_cost)}</div>
-                  <div className="text-xs text-zinc-500">Total Cost</div>
+                <div className="text-center py-2 px-3 rounded-md bg-muted/50">
+                  <div className="text-lg font-semibold text-foreground">{formatCost(agent.total_cost)}</div>
+                  <div className="text-xs text-muted-foreground">Total Cost</div>
                 </div>
               </div>
 
               {/* Last active */}
-              <div className="flex items-center gap-1.5 mt-3 text-xs text-zinc-400">
+              <div className="flex items-center gap-1.5 mt-3 text-xs text-muted-foreground/60">
                 <Clock className="h-3 w-3" />
                 <span>Last active {formatRelative(agent.last_active)}</span>
               </div>

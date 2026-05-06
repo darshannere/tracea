@@ -82,7 +82,7 @@ function RcaStatusBadge({ status }: { status: RcaStatus }) {
     )
   }
   return (
-    <span className="inline-flex items-center gap-1 text-xs text-zinc-500 bg-zinc-50 px-1.5 py-0.5 rounded" title="No RCA">
+    <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded" title="No RCA">
       <Minus className="h-3 w-3" />
       —
     </span>
@@ -116,7 +116,7 @@ function IssueCard({ issue, allAgentIds }: IssueCardProps) {
   return (
     <Collapsible.Root open={expanded} onOpenChange={setExpanded}>
       <Collapsible.Trigger asChild>
-        <div className="flex items-center gap-3 px-4 py-3 hover:bg-zinc-50 cursor-pointer border-b border-zinc-100 transition-colors">
+        <div className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 cursor-pointer border-b border-border/50 transition-colors">
           <span
             className="px-2 py-0.5 rounded text-xs font-medium flex-shrink-0"
             style={{ backgroundColor: sev.bg, color: sev.text }}
@@ -126,23 +126,23 @@ function IssueCard({ issue, allAgentIds }: IssueCardProps) {
           {issue.agent_id ? (
             <AgentPill agentId={issue.agent_id} allAgentIds={allAgentIds} />
           ) : (
-            <span className="text-xs text-zinc-400">no agent</span>
+            <span className="text-xs text-muted-foreground/60">no agent</span>
           )}
           {formatPlatform(issue.platform) && (
-            <span className="text-xs text-zinc-500 bg-zinc-100 px-1.5 py-0.5 rounded flex-shrink-0">
+            <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded flex-shrink-0">
               {formatPlatform(issue.platform)}
             </span>
           )}
-          <span className="text-xs font-mono text-zinc-500 truncate">
+          <span className="text-xs font-mono text-muted-foreground truncate">
             {issue.session_id.slice(0, 8)}…
           </span>
-          <span className="text-xs text-zinc-400 flex items-center gap-1 ml-auto flex-shrink-0">
+          <span className="text-xs text-muted-foreground/60 flex items-center gap-1 ml-auto flex-shrink-0">
             <Clock className="h-3 w-3" />
             {formatRelative(issue.detected_at)}
           </span>
           <RcaStatusBadge status={issue.rca_status} />
           <ChevronDown className={cn(
-            'h-4 w-4 text-zinc-400 transition-transform flex-shrink-0',
+            'h-4 w-4 text-muted-foreground/60 transition-transform flex-shrink-0',
             expanded ? 'rotate-180' : ''
           )} />
         </div>
@@ -217,7 +217,7 @@ export function IssuesPage() {
         </div>
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="border border-zinc-200 rounded-lg overflow-hidden">
+            <div key={i} className="border border-border rounded-lg overflow-hidden">
               <Skeleton className="h-11 w-full" />
               <div className="p-4 space-y-3">
                 <Skeleton className="h-4 w-3/4" />
@@ -232,20 +232,20 @@ export function IssuesPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <AlertCircle className="h-8 w-8 mb-2" />
         <p className="text-sm">Failed to load data</p>
-        <p className="text-xs text-zinc-400">Retrying in 5 seconds...</p>
+        <p className="text-xs text-muted-foreground/60">Retrying in 5 seconds...</p>
       </div>
     )
   }
 
   if (allIssues.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <AlertCircle className="h-8 w-8 mb-2" />
         <p className="text-sm font-medium">No issues detected</p>
-        <p className="text-xs text-zinc-400">Issues will appear here when detection rules fire</p>
+        <p className="text-xs text-muted-foreground/60">Issues will appear here when detection rules fire</p>
       </div>
     )
   }
@@ -253,9 +253,9 @@ export function IssuesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <AlertCircle className="h-5 w-5 text-zinc-500" />
+        <AlertCircle className="h-5 w-5 text-muted-foreground" />
         <h2 className="text-xl font-semibold">Issues</h2>
-        <span className="text-sm text-zinc-500">
+        <span className="text-sm text-muted-foreground">
           {selectedAgent ? `${issues.length} of ${allIssues.length}` : `${allIssues.length} total`}
         </span>
       </div>
@@ -263,14 +263,14 @@ export function IssuesPage() {
       {/* Agent filter */}
       {agents.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <Bot className="h-4 w-4 text-zinc-400 flex-shrink-0" />
+          <Bot className="h-4 w-4 text-muted-foreground/60 flex-shrink-0" />
           <button
             onClick={() => setSelectedAgent(null)}
             className={cn(
               'px-2.5 py-1 rounded-full text-xs font-medium border transition-colors',
               selectedAgent === null
-                ? 'border-zinc-400 bg-zinc-100 text-zinc-700'
-                : 'border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300'
+                ? 'border-muted-foreground/40 bg-muted text-foreground'
+                : 'border-border bg-white text-muted-foreground hover:border-input'
             )}
           >
             All agents
@@ -287,7 +287,7 @@ export function IssuesPage() {
                   'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-medium border transition-colors',
                   isSelected
                     ? `${color.bg} ${color.text} ${color.border} border-2`
-                    : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300'
+                    : 'border-border bg-white text-muted-foreground hover:border-input'
                 )}
               >
                 <span className={cn('h-1.5 w-1.5 rounded-full', color.dot)} />
@@ -303,22 +303,22 @@ export function IssuesPage() {
 
       <div className="space-y-4">
         {Object.keys(grouped).length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-32 text-zinc-400">
+          <div className="flex flex-col items-center justify-center h-32 text-muted-foreground/60">
             <p className="text-sm">No issues for this agent</p>
           </div>
         ) : (
           Object.entries(grouped).map(([category, catIssues]) => (
-            <div key={category} className="border border-zinc-200 rounded-lg overflow-hidden">
+            <div key={category} className="border border-border rounded-lg overflow-hidden">
               <button
                 onClick={() => toggleGroup(category)}
-                className="w-full flex items-center gap-3 px-4 py-3 bg-zinc-50 hover:bg-zinc-100 transition-colors text-left"
+                className="w-full flex items-center gap-3 px-4 py-3 bg-muted/50 hover:bg-muted transition-colors text-left"
               >
-                <span className="px-2 py-0.5 rounded text-xs font-medium border border-zinc-300 text-zinc-700 bg-white">
+                <span className="px-2 py-0.5 rounded text-xs font-medium border border-input text-foreground bg-white">
                   {category}
                 </span>
-                <span className="text-xs text-zinc-500">{catIssues.length} issues</span>
+                <span className="text-xs text-muted-foreground">{catIssues.length} issues</span>
                 <ChevronDown className={cn(
-                  'h-4 w-4 text-zinc-400 ml-auto transition-transform',
+                  'h-4 w-4 text-muted-foreground/60 ml-auto transition-transform',
                   openGroups.has(category) ? 'rotate-180' : ''
                 )} />
               </button>

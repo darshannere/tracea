@@ -12,7 +12,7 @@ export function ToolLogRow({ event }: ToolLogRowProps) {
   const hasTokenBadge = event.nearest_input_tokens !== null && event.nearest_input_tokens > 0
 
   const rowClass = cn(
-    'px-2 py-1 font-mono text-xs border-l-2 flex flex-col gap-0 hover:bg-zinc-50',
+    'px-2 py-1 font-mono text-xs border-l-2 flex flex-col gap-0 hover:bg-muted/50',
     isError
       ? 'border-rose-400 bg-rose-50/50'
       : 'border-transparent',
@@ -36,14 +36,14 @@ export function ToolLogRow({ event }: ToolLogRowProps) {
         <span className="text-accent font-mono font-semibold truncate shrink-0 max-w-[140px]">
           {event.tool_name}
         </span>
-        <span className="text-zinc-400 font-mono shrink-0 text-[10px]">
+        <span className="text-muted-foreground/60 font-mono shrink-0 text-[10px]">
           {formatTs(event.timestamp)}
         </span>
-        <span className={cn('shrink-0 text-[10px]', latCls || 'text-zinc-400')}>
+        <span className={cn('shrink-0 text-[10px]', latCls || 'text-muted-foreground/60')}>
           {formatDuration(event.duration_ms)}
         </span>
         {hasTokenBadge && (
-          <span className="ml-auto shrink-0 rounded bg-zinc-100 px-1 text-[10px] text-zinc-600">
+          <span className="ml-auto shrink-0 rounded bg-muted px-1 text-[10px] text-muted-foreground">
             {formatTokensCompact(event.nearest_input_tokens)}↑{' '}
             {formatTokensCompact(event.nearest_output_tokens ?? 0)}↓
           </span>
@@ -53,7 +53,7 @@ export function ToolLogRow({ event }: ToolLogRowProps) {
       {/* Line 2 (conditional): tool_summary */}
       {event.tool_summary && (
         <div
-          className="text-[10px] text-zinc-500 font-mono truncate"
+          className="text-[10px] text-muted-foreground font-mono truncate"
           title={event.tool_summary}
         >
           {event.tool_summary}

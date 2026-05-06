@@ -2,10 +2,10 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cart
 
 export function CostChart({ data }: { data: { date: string; cost: number }[] }) {
   return (
-    <div className="border border-zinc-200 rounded-lg p-4">
-      <h3 className="text-sm font-medium text-zinc-700 mb-3">Cost per Day</h3>
+    <div className="border border-border rounded-lg p-4">
+      <h3 className="text-sm font-medium text-foreground mb-3">Cost per Day</h3>
       {data.length === 0 ? (
-        <div className="h-48 flex items-center justify-center text-zinc-400 text-sm">
+        <div className="h-48 flex items-center justify-center text-muted-foreground/60 text-sm">
           No data to display
         </div>
       ) : (
@@ -48,10 +48,10 @@ export function CostChart({ data }: { data: { date: string; cost: number }[] }) 
 
 export function TokenChart({ data }: { data: { date: string; tokens: number }[] }) {
   return (
-    <div className="border border-zinc-200 rounded-lg p-4">
-      <h3 className="text-sm font-medium text-zinc-700 mb-3">Tokens per Day</h3>
+    <div className="border border-border rounded-lg p-4">
+      <h3 className="text-sm font-medium text-foreground mb-3">Tokens per Day</h3>
       {data.length === 0 ? (
-        <div className="h-48 flex items-center justify-center text-zinc-400 text-sm">
+        <div className="h-48 flex items-center justify-center text-muted-foreground/60 text-sm">
           No data to display
         </div>
       ) : (

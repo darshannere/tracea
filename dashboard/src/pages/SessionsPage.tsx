@@ -41,6 +41,7 @@ interface Session {
   platform: string | null
   started_at: string
   ended_at: string | null
+  last_event_at: string | null
   duration_ms: number | null
   total_cost: number | null
   total_tokens: number | null
@@ -112,7 +113,7 @@ export function SessionsPage() {
         header: 'Agent',
         cell: ({ row }) => {
           const aid = row.original.agent_id
-          if (!aid) return <span className="text-zinc-400 text-xs">—</span>
+          if (!aid) return <span className="text-muted-foreground/60 text-xs">—</span>
           const color = agentColor(aid, agentIds)
           return (
             <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-mono font-medium', color.bg, color.text)}>
@@ -127,8 +128,8 @@ export function SessionsPage() {
         header: 'Platform',
         cell: ({ row }) => {
           const label = formatPlatform(row.original.platform)
-          if (!label) return <span className="text-zinc-400 text-xs">—</span>
-          return <span className="text-xs text-zinc-600 bg-zinc-100 px-1.5 py-0.5 rounded">{label}</span>
+          if (!label) return <span className="text-muted-foreground/60 text-xs">—</span>
+          return <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{label}</span>
         },
       },
       {
@@ -143,7 +144,7 @@ export function SessionsPage() {
         header: 'Last Active',
         cell: ({ row }) => {
           const ts = row.original.last_event_at
-          return ts ? formatDate(ts) : <span className="text-zinc-400 text-xs">—</span>
+          return ts ? formatDate(ts) : <span className="text-muted-foreground/60 text-xs">—</span>
         },
       },
       {
@@ -212,7 +213,7 @@ export function SessionsPage() {
         ),
         cell: ({ row }) => {
           const count = row.original.issue_count
-          if (count === null || count === 0) return <span className="text-zinc-400">-</span>
+          if (count === null || count === 0) return <span className="text-muted-foreground/60">-</span>
           return (
             <Badge variant="error" className="gap-1">
               <AlertCircle className="h-3 w-3" />
@@ -288,20 +289,20 @@ export function SessionsPage() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <AlertCircle className="h-8 w-8 mb-2" />
         <p className="text-sm">Failed to load data</p>
-        <p className="text-xs text-zinc-400">Retrying in 5 seconds...</p>
+        <p className="text-xs text-muted-foreground/60">Retrying in 5 seconds...</p>
       </div>
     )
   }
 
   if (allSessions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-zinc-500">
+      <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <Clock className="h-8 w-8 mb-2" />
         <p className="text-sm font-medium">No sessions yet</p>
-        <p className="text-xs text-zinc-400">Start using the SDK to see your first session</p>
+        <p className="text-xs text-muted-foreground/60">Start using the SDK to see your first session</p>
       </div>
     )
   }
@@ -313,7 +314,7 @@ export function SessionsPage() {
         <div className="flex items-center gap-3">
           <Zap className="h-5 w-5 text-accent" />
           <h2 className="text-xl font-semibold">Sessions</h2>
-          <span className="text-sm text-zinc-500">
+          <span className="text-sm text-muted-foreground">
             {selectedAgent ? `${sessions.length} of ${data?.total ?? 0}` : `${total} total`}
           </span>
         </div>
@@ -331,17 +332,17 @@ export function SessionsPage() {
       {hasChartData && (
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-zinc-500" />
-            <h3 className="text-sm font-semibold text-zinc-700">Insights</h3>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Insights</h3>
             {selectedAgent && (
-              <span className="text-xs text-zinc-400">filtered to {selectedAgent}</span>
+              <span className="text-xs text-muted-foreground/60">filtered to {selectedAgent}</span>
             )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {aggregatedMetrics.costSeries.length > 0 && (
-              <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+              <div className="border border-border rounded-lg p-4 bg-card">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                   Cost per Day
                 </h4>
                 <CostChart data={aggregatedMetrics.costSeries} />
@@ -349,8 +350,8 @@ export function SessionsPage() {
             )}
 
             {aggregatedMetrics.tokenSeries.length > 0 && (
-              <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+              <div className="border border-border rounded-lg p-4 bg-card">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                   Tokens per Day
                 </h4>
                 <TokenChart data={aggregatedMetrics.tokenSeries} />
@@ -358,31 +359,31 @@ export function SessionsPage() {
             )}
 
             {aggregatedMetrics.eventsSeries.length > 0 && (
-              <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-                <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+              <div className="border border-border rounded-lg p-4 bg-card">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                   Events per Day
                 </h4>
                 <EventsChart data={aggregatedMetrics.eventsSeries} />
               </div>
             )}
 
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Duration Distribution
               </h4>
               <DurationDistributionChart sessions={sessions} />
             </div>
 
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Session Health
               </h4>
               <HealthChart sessions={sessions} />
               <HealthLegend sessions={sessions} />
             </div>
 
-            <div className="border border-zinc-200 rounded-lg p-4 bg-white">
-              <h4 className="text-xs font-medium text-zinc-500 uppercase tracking-wide mb-2">
+            <div className="border border-border rounded-lg p-4 bg-card">
+              <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Cost per Session
               </h4>
               <CostPerSessionChart sessions={sessions} />
@@ -392,13 +393,13 @@ export function SessionsPage() {
       )}
 
       {/* Sessions Table */}
-      <div className="border border-zinc-200 rounded-lg overflow-hidden">
+      <div className="border border-border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => (
-                  <TableHead key={header.id} className="bg-zinc-50">
+                  <TableHead key={header.id} className="bg-muted/50">
                     {header.isPlaceholder
                       ? null
                       : flexRender(header.column.columnDef.header, header.getContext())}

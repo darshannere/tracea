@@ -49,14 +49,14 @@ export function AgentTree() {
                 'w-full flex items-center gap-2 px-2 py-1.5 text-xs font-mono transition-colors',
                 isAgentActive
                   ? 'bg-accent/10 text-accent'
-                  : 'text-zinc-700 hover:bg-zinc-100'
+                  : 'text-foreground hover:bg-muted'
               )}
             >
               <Bot className="h-3 w-3 shrink-0" />
               <span className="truncate">{agentId.slice(0, 14)}</span>
-              <span className="ml-auto text-[10px] text-zinc-400">{agentSessions.length}</span>
+              <span className="ml-auto text-[10px] text-muted-foreground/60">{agentSessions.length}</span>
             </button>
-            <div className="ml-4 border-l border-zinc-200">
+            <div className="ml-4 border-l border-border">
               {agentSessions.map((s) => (
                 <button
                   key={s.session_id}
@@ -65,13 +65,13 @@ export function AgentTree() {
                     'w-full flex items-center gap-2 px-2 py-1 text-[10px] font-mono transition-colors',
                     isActive(s.session_id, agentId)
                       ? 'bg-accent/10 text-accent'
-                      : 'text-zinc-500 hover:bg-zinc-50'
+                      : 'text-muted-foreground hover:bg-muted/50'
                   )}
                 >
                   <Activity className="h-2.5 w-2.5 shrink-0" />
                   <span className="truncate">{s.session_id.slice(0, 10)}…</span>
                   {s.ended_at ? (
-                    <Clock className="h-2.5 w-2.5 shrink-0 text-zinc-400 ml-auto" />
+                    <Clock className="h-2.5 w-2.5 shrink-0 text-muted-foreground/60 ml-auto" />
                   ) : (
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 ml-auto" />
                   )}
@@ -84,8 +84,8 @@ export function AgentTree() {
 
       {/* Solo sessions */}
       {soloSessions.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-zinc-200">
-          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-400 font-semibold">
+        <div className="mt-2 pt-2 border-t border-border">
+          <div className="px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/60 font-semibold">
             Solo Sessions
           </div>
           {soloSessions.map((s) => (
@@ -96,13 +96,13 @@ export function AgentTree() {
                 'w-full flex items-center gap-2 px-2 py-1 text-[10px] font-mono transition-colors',
                 isActive(s.session_id)
                   ? 'bg-accent/10 text-accent'
-                  : 'text-zinc-500 hover:bg-zinc-50'
+                  : 'text-muted-foreground hover:bg-muted/50'
               )}
             >
               <Activity className="h-2.5 w-2.5 shrink-0" />
               <span className="truncate">{s.session_id.slice(0, 12)}…</span>
               {s.ended_at ? (
-                <Clock className="h-2.5 w-2.5 shrink-0 text-zinc-400 ml-auto" />
+                <Clock className="h-2.5 w-2.5 shrink-0 text-muted-foreground/60 ml-auto" />
               ) : (
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0 ml-auto" />
               )}
@@ -112,7 +112,7 @@ export function AgentTree() {
       )}
 
       {sessions.length === 0 && (
-        <div className="px-2 py-4 text-xs text-zinc-400 text-center">
+        <div className="px-2 py-4 text-xs text-muted-foreground/60 text-center">
           No sessions yet
         </div>
       )}

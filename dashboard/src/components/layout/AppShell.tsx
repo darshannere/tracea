@@ -10,7 +10,7 @@ export function AppShell() {
       <RcaBanner />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
-        <main className="flex-1 bg-white overflow-auto p-6">
+        <main className="flex-1 bg-secondary overflow-auto p-6">
           <Outlet />
         </main>
       </div>

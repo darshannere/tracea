@@ -59,7 +59,7 @@ function parseMarkdownish(text: string): React.ReactNode[] {
     // Heading: ## Root-Cause Analysis
     if (trimmed.startsWith('## ')) {
       nodes.push(
-        <h4 key={key++} className="text-sm font-semibold text-zinc-800 mt-3 mb-1 flex items-center gap-1.5">
+        <h4 key={key++} className="text-sm font-semibold text-foreground mt-3 mb-1 flex items-center gap-1.5">
           <Lightbulb className="h-3.5 w-3.5 text-amber-500" />
           {trimmed.replace(/^##\s*/, '')}
         </h4>
@@ -70,7 +70,7 @@ function parseMarkdownish(text: string): React.ReactNode[] {
     // Heading: ### 1. Problem Summary
     if (trimmed.startsWith('### ')) {
       nodes.push(
-        <h5 key={key++} className="text-xs font-semibold text-zinc-700 mt-2 mb-1">
+        <h5 key={key++} className="text-xs font-semibold text-foreground mt-2 mb-1">
           {trimmed.replace(/^###\s*\d*\.?\s*/, '')}
         </h5>
       )
@@ -79,7 +79,7 @@ function parseMarkdownish(text: string): React.ReactNode[] {
 
     // Horizontal rule
     if (trimmed === '---') {
-      nodes.push(<hr key={key++} className="border-zinc-200 my-2" />)
+      nodes.push(<hr key={key++} className="border-border my-2" />)
       continue
     }
 
@@ -87,10 +87,10 @@ function parseMarkdownish(text: string): React.ReactNode[] {
     const bulletBoldMatch = trimmed.match(/^[-*]\s*\*\*(.+?)\*\*\s*(.*)$/)
     if (bulletBoldMatch) {
       nodes.push(
-        <div key={key++} className="flex gap-2 text-xs text-zinc-600 py-0.5">
-          <span className="text-zinc-400 shrink-0">•</span>
+        <div key={key++} className="flex gap-2 text-xs text-muted-foreground py-0.5">
+          <span className="text-muted-foreground/60 shrink-0">•</span>
           <span>
-            <span className="font-medium text-zinc-700">{bulletBoldMatch[1]}</span>
+            <span className="font-medium text-foreground">{bulletBoldMatch[1]}</span>
             {bulletBoldMatch[2] && <span className="ml-1">{bulletBoldMatch[2]}</span>}
           </span>
         </div>
@@ -101,8 +101,8 @@ function parseMarkdownish(text: string): React.ReactNode[] {
     // Plain bullet: - something
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
       nodes.push(
-        <div key={key++} className="flex gap-2 text-xs text-zinc-600 py-0.5">
-          <span className="text-zinc-400 shrink-0">•</span>
+        <div key={key++} className="flex gap-2 text-xs text-muted-foreground py-0.5">
+          <span className="text-muted-foreground/60 shrink-0">•</span>
           <span>{renderBold(trimmed.replace(/^[-*]\s*/, ''))}</span>
         </div>
       )
@@ -111,7 +111,7 @@ function parseMarkdownish(text: string): React.ReactNode[] {
 
     // Paragraph with possible bold
     nodes.push(
-      <p key={key++} className="text-xs text-zinc-600 leading-relaxed py-0.5">
+      <p key={key++} className="text-xs text-muted-foreground leading-relaxed py-0.5">
         {renderBold(trimmed)}
       </p>
     )
@@ -156,7 +156,7 @@ function StructuredRCAPanel({ json }: { json?: string }) {
     <div className="space-y-3">
       {data.confidence && (
         <div className="flex items-center gap-2">
-          <span className="text-[11px] text-zinc-500">Confidence:</span>
+          <span className="text-[11px] text-muted-foreground">Confidence:</span>
           <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${confidenceColor(data.confidence)}`}>
             {data.confidence}
           </span>
@@ -167,21 +167,21 @@ function StructuredRCAPanel({ json }: { json?: string }) {
         if (!value || (Array.isArray(value) && value.length === 0)) return null
         return (
           <div key={title} className="space-y-1">
-            <h5 className="text-[11px] font-semibold text-zinc-700 flex items-center gap-1">
-              <Icon className="h-3 w-3 text-zinc-500" />
+            <h5 className="text-[11px] font-semibold text-foreground flex items-center gap-1">
+              <Icon className="h-3 w-3 text-muted-foreground" />
               {title}
             </h5>
             {Array.isArray(value) ? (
               <ul className="space-y-0.5">
                 {value.map((item, i) => (
-                  <li key={i} className="flex gap-2 text-xs text-zinc-600">
-                    <span className="text-zinc-400 shrink-0">•</span>
+                  <li key={i} className="flex gap-2 text-xs text-muted-foreground">
+                    <span className="text-muted-foreground/60 shrink-0">•</span>
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
             ) : (
-              <p className="text-xs text-zinc-600 leading-relaxed">{value}</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{value}</p>
             )}
           </div>
         )
@@ -194,7 +194,7 @@ function renderBold(text: string): React.ReactNode {
   const parts = text.split(/(\*\*.+?\*\*)/g)
   return parts.map((part, i) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={i} className="font-medium text-zinc-800">{part.slice(2, -2)}</strong>
+      return <strong key={i} className="font-medium text-foreground">{part.slice(2, -2)}</strong>
     }
     return <span key={i}>{part}</span>
   })
@@ -209,15 +209,15 @@ function TriggerDetails({ captured }: { captured?: string }) {
 
     return (
       <div className="space-y-1.5">
-        <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
+        <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
           <Bug className="h-3.5 w-3.5 text-rose-500" />
           What Triggered This
         </h4>
-        <div className="bg-white border border-zinc-200 rounded-md p-2.5 space-y-1">
+        <div className="bg-white border border-border rounded-md p-2.5 space-y-1">
           {entries.map(([key, value]) => (
             <div key={key} className="flex gap-2 text-xs">
-              <code className="shrink-0 font-mono text-[11px] bg-zinc-100 px-1 py-0.5 rounded text-zinc-600">{key}</code>
-              <span className="text-zinc-700 font-mono text-[11px] truncate">{String(value)}</span>
+              <code className="shrink-0 font-mono text-[11px] bg-muted px-1 py-0.5 rounded text-muted-foreground">{key}</code>
+              <span className="text-foreground font-mono text-[11px] truncate">{String(value)}</span>
             </div>
           ))}
         </div>
@@ -226,11 +226,11 @@ function TriggerDetails({ captured }: { captured?: string }) {
   } catch {
     return (
       <div className="space-y-1.5">
-        <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
+        <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
           <Bug className="h-3.5 w-3.5 text-rose-500" />
           What Triggered This
         </h4>
-        <pre className="bg-white border border-zinc-200 rounded-md p-2.5 text-[11px] font-mono text-zinc-700 whitespace-pre-wrap">
+        <pre className="bg-white border border-border rounded-md p-2.5 text-[11px] font-mono text-foreground whitespace-pre-wrap">
           {captured}
         </pre>
       </div>
@@ -255,16 +255,16 @@ function SessionContext({
 
   return (
     <div className="space-y-1.5">
-      <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
+      <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
         <Layers className="h-3.5 w-3.5 text-indigo-500" />
         Session Context
       </h4>
       <div className="grid grid-cols-3 gap-2">
         {stats.map((s) => (
-          <div key={s.label} className="bg-white border border-zinc-200 rounded-md p-2 text-center">
+          <div key={s.label} className="bg-white border border-border rounded-md p-2 text-center">
             <s.icon className={`h-3 w-3 mx-auto mb-1 ${s.color}`} />
-            <div className="text-[11px] font-semibold text-zinc-800">{s.value}</div>
-            <div className="text-[10px] text-zinc-400 mt-0.5">{s.label}</div>
+            <div className="text-[11px] font-semibold text-foreground">{s.value}</div>
+            <div className="text-[10px] text-muted-foreground/60 mt-0.5">{s.label}</div>
           </div>
         ))}
       </div>
@@ -278,27 +278,27 @@ function RuleSnapshot({ snapshot }: { snapshot?: string }) {
     const rule = JSON.parse(snapshot)
     return (
       <div className="space-y-1.5">
-        <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
+        <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
           <Wrench className="h-3.5 w-3.5 text-violet-500" />
           Detection Rule
         </h4>
-        <div className="bg-white border border-zinc-200 rounded-md p-2.5 space-y-1">
+        <div className="bg-white border border-border rounded-md p-2.5 space-y-1">
           {rule.id && (
             <div className="flex gap-2 text-xs">
-              <span className="text-zinc-400 shrink-0 w-16">ID</span>
-              <code className="font-mono text-zinc-700">{rule.id}</code>
+              <span className="text-muted-foreground/60 shrink-0 w-16">ID</span>
+              <code className="font-mono text-foreground">{rule.id}</code>
             </div>
           )}
           {rule.description && (
             <div className="flex gap-2 text-xs">
-              <span className="text-zinc-400 shrink-0 w-16">Desc</span>
-              <span className="text-zinc-700">{rule.description}</span>
+              <span className="text-muted-foreground/60 shrink-0 w-16">Desc</span>
+              <span className="text-foreground">{rule.description}</span>
             </div>
           )}
           {rule.severity && (
             <div className="flex gap-2 text-xs">
-              <span className="text-zinc-400 shrink-0 w-16">Severity</span>
-              <span className="capitalize text-zinc-700">{rule.severity}</span>
+              <span className="text-muted-foreground/60 shrink-0 w-16">Severity</span>
+              <span className="capitalize text-foreground">{rule.severity}</span>
             </div>
           )}
         </div>
@@ -311,7 +311,7 @@ function RuleSnapshot({ snapshot }: { snapshot?: string }) {
 
 export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
   return (
-    <div className="px-4 py-4 bg-zinc-50 border-b border-zinc-200 space-y-4">
+    <div className="px-4 py-4 bg-muted/50 border-b border-border space-y-4">
       {/* Top row: Session context + Trigger */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SessionContext
@@ -326,7 +326,7 @@ export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
       {(issue.rca_text || issue.rca_structured) && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
+            <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
               <FileText className="h-3.5 w-3.5 text-accent" />
               Root-Cause Analysis
             </h4>
@@ -339,12 +339,12 @@ export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
             </Link>
           </div>
           {issue.rca_structured && (
-            <div className="bg-white border border-zinc-200 rounded-md p-3.5">
+            <div className="bg-white border border-border rounded-md p-3.5">
               <StructuredRCAPanel json={issue.rca_structured} />
             </div>
           )}
           {issue.rca_text && (
-            <div className="bg-white border border-zinc-200 rounded-md p-3.5">
+            <div className="bg-white border border-border rounded-md p-3.5">
               {parseMarkdownish(issue.rca_text)}
             </div>
           )}
@@ -354,7 +354,7 @@ export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
       {/* Error message */}
       {issue.error_message && (
         <div className="space-y-1.5">
-          <h4 className="text-xs font-medium text-zinc-700 flex items-center gap-1.5">
+          <h4 className="text-xs font-medium text-foreground flex items-center gap-1.5">
             <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
             Error
           </h4>
@@ -369,10 +369,10 @@ export function IssueDetailPanel({ issue }: { issue: IssueDetail }) {
 
       {/* Event IDs */}
       {issue.event_id && (
-        <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
           <Zap className="h-3 w-3" />
           <span>Triggering event:</span>
-          <code className="font-mono bg-zinc-100 px-1 py-0.5 rounded">{issue.event_id.slice(0, 12)}...</code>
+          <code className="font-mono bg-muted px-1 py-0.5 rounded">{issue.event_id.slice(0, 12)}...</code>
         </div>
       )}
     </div>

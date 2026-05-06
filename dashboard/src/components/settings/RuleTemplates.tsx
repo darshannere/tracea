@@ -140,7 +140,7 @@ export function RuleTemplates({ onAppend }: RuleTemplatesProps) {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-300 rounded-md px-2.5 py-1.5 hover:bg-zinc-50 transition-colors"
+        className="flex items-center gap-1.5 text-xs font-medium text-foreground bg-white border border-input rounded-md px-2.5 py-1.5 hover:bg-muted/50 transition-colors"
       >
         <Plus className="h-3.5 w-3.5" />
         Add Rule Template
@@ -150,23 +150,23 @@ export function RuleTemplates({ onAppend }: RuleTemplatesProps) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-zinc-200 rounded-lg shadow-lg z-20 py-1 max-h-80 overflow-auto">
+          <div className="absolute top-full left-0 mt-1 w-80 bg-white border border-border rounded-lg shadow-lg z-20 py-1 max-h-80 overflow-auto">
             {RULE_TEMPLATES.map((template, i) => (
               <div
                 key={template.label}
-                className="px-3 py-2 hover:bg-zinc-50 border-b border-zinc-100 last:border-0"
+                className="px-3 py-2 hover:bg-muted/50 border-b border-border/50 last:border-0"
               >
                 <div className="flex items-start justify-between gap-2">
                   <button
                     onClick={() => handleAppend(template, i)}
                     className="text-left flex-1"
                   >
-                    <div className="text-sm font-medium text-zinc-800">{template.label}</div>
-                    <div className="text-xs text-zinc-500 mt-0.5">{template.description}</div>
+                    <div className="text-sm font-medium text-foreground">{template.label}</div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{template.description}</div>
                   </button>
                   <button
                     onClick={() => handleCopy(template, i)}
-                    className="shrink-0 p-1 text-zinc-400 hover:text-zinc-600 transition-colors"
+                    className="shrink-0 p-1 text-muted-foreground/60 hover:text-muted-foreground transition-colors"
                     title="Copy YAML"
                   >
                     {copiedIndex === i ? (
