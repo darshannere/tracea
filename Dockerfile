@@ -3,6 +3,7 @@ FROM python:3.12-slim AS deps
 WORKDIR /app
 COPY pyproject.toml .
 COPY README.md .
+COPY tracea/ ./tracea/
 RUN pip install --no-cache-dir --prefix=/install -e .
 
 # Stage 2: Runtime
@@ -19,6 +20,9 @@ COPY --from=deps /install /usr/local
 # Copy application code
 COPY tracea/ ./tracea/
 
+# Copy default configs for fallback when host volume doesn't provide them
+COPY tracea/server/detection/defaults/ /app/defaults/
+
 # Create data directory
 RUN mkdir -p /data && chown tracea:tracea /data
 
@@ -33,5 +37,8 @@ EXPOSE 8080
 VOLUME ["/data"]
 
 ENV TRACEA_DB_PATH=/data/tracea.db
+ENV TRACEA_RULES_PATH=/data/detection_rules.yaml
+ENV TRACEA_ALERTS_PATH=/data/alerts.yaml
+ENV TRACEA_DATA_DIR=/data
 
 ENTRYPOINT ["/app/entrypoint.sh"]
