@@ -10,6 +10,7 @@ class TraceaConfig:
     server_url: str
     base_url: str  # TRACEA_BASE_URL — defaults to server_url for proxy support
     user_id: str = ""  # Team member identifier for multi-user dashboards
+    agent_id: str = ""  # Agent identifier (TRACEA_AGENT_ID) — default for events
     metadata: dict = field(default_factory=dict)  # PYS-10: init-level metadata
     tags: list[str] = field(default_factory=list)  # PYS-10: init-level tags
     _initialized: bool = field(default=False, repr=False)
@@ -21,6 +22,7 @@ def init(
     server_url: str | None = None,
     base_url: str | None = None,
     user_id: str | None = None,
+    agent_id: str | None = None,
     metadata: dict | None = None,
     tags: list[str] | None = None,
 ) -> TraceaConfig:
@@ -45,7 +47,7 @@ def init(
     resolved_server_url = _resolve(server_url, "TRACEA_SERVER_URL", "server_url", "http://localhost:8080")
     resolved_base_url = _resolve(base_url, "TRACEA_BASE_URL", "base_url", resolved_server_url)
     resolved_user_id = _resolve(user_id, "TRACEA_USER_ID", "user_id", "")
-    resolved_agent_id = _resolve(None, "TRACEA_AGENT_ID", "agent_id", "")
+    resolved_agent_id = _resolve(agent_id, "TRACEA_AGENT_ID", "agent_id", "")
     resolved_metadata = metadata or {}
     resolved_tags = tags or []
 
@@ -54,6 +56,7 @@ def init(
         server_url=resolved_server_url,
         base_url=resolved_base_url,
         user_id=resolved_user_id,
+        agent_id=resolved_agent_id,
         metadata=resolved_metadata,
         tags=resolved_tags,
     )

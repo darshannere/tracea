@@ -70,6 +70,7 @@ def init(
     server_url: str | None = None,
     base_url: str | None = None,
     user_id: str | None = None,
+    agent_id: str | None = None,
     metadata: dict | None = None,
     tags: list[str] | None = None,
 ):
@@ -86,6 +87,8 @@ def init(
                   Defaults to TRACEA_BASE_URL env var or server_url.
         user_id: Team member identifier for multi-user dashboards.
                  Defaults to TRACEA_USER_ID env var.
+        agent_id: Agent identifier applied to all events (e.g. "my-bot-v2").
+                  Defaults to TRACEA_AGENT_ID env var.
         metadata: Global metadata applied to all events.
         tags: Global tags applied to all events.
 
@@ -99,6 +102,7 @@ def init(
         server_url=server_url,
         base_url=base_url,
         user_id=user_id,
+        agent_id=agent_id,
         metadata=metadata,
         tags=tags,
     )

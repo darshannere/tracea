@@ -104,7 +104,7 @@ def _build_event(
     return TracedEvent(
         event_id=uuid4(),
         session_id=session_id,
-        agent_id=ctx.get("agent_id", ""),
+        agent_id=ctx.get("agent_id") or (config.agent_id if config else ""),
         user_id=config.user_id if config else "",
         sequence=_get_next_sequence(session_id),
         timestamp=datetime.now(timezone.utc),

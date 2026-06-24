@@ -33,9 +33,17 @@ def _resolve_session_id() -> str:
 
 
 def _resolve_agent_id() -> str:
-    """Return the active agent_id or empty string."""
+    """Return the active agent_id. Session context takes precedence, then the
+    config-level agent_id (TRACEA_AGENT_ID), else empty string."""
     ctx = get_session_ctx()
-    return ctx.get("agent_id") or ""
+    ctx_agent = ctx.get("agent_id")
+    if ctx_agent:
+        return ctx_agent
+    try:
+        from tracea.config import get_config
+        return get_config().agent_id
+    except Exception:
+        return ""
 
 
 def _resolve_metadata(extra: dict[str, Any] | None = None) -> dict[str, Any]:
