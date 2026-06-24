@@ -74,6 +74,12 @@ def test_patch_intercepts_openai():
     assert ev.model == "gpt-4o"
     assert ev.status_code == 200
     assert ev.duration_ms >= 0
+    # Regression: tokens_used must be populated (body read once, reused for usage)
+    assert ev.tokens_used is not None, "tokens_used must not be None for OpenAI"
+    assert ev.tokens_used.total == 5
+    assert ev.tokens_used.input == 2
+    assert ev.tokens_used.output == 3
+    assert ev.cost_usd is not None
 
 
 @pytest.mark.asyncio
@@ -100,6 +106,10 @@ async def test_patch_intercepts_anthropic_async():
     ev = captured[0]
     assert ev.provider == "anthropic"
     assert ev.status_code == 200
+    # Regression: Anthropic usage shape (input_tokens/output_tokens) must parse
+    assert ev.tokens_used is not None, "tokens_used must not be None for Anthropic"
+    assert ev.tokens_used.input == 2
+    assert ev.tokens_used.output == 3
 
 
 # ---------------------------------------------------------------------------
@@ -245,3 +255,51 @@ def test_unpatch_restores_original():
     unpatch()
     assert httpx.Client.send is real_sync
     assert httpx.AsyncClient.send is real_async
+
+
+# ---------------------------------------------------------------------------
+# Regression: token usage extraction (Wave 1 fix #1)
+# ---------------------------------------------------------------------------
+
+def test_usage_extracted_when_content_also_read():
+    """Regression: reading response.text for content must NOT prevent usage
+    extraction. Previously response.text set is_stream_consumed and _extract_usage
+    bailed, shipping tokens_used=None for every event."""
+    from tracea.patch.httpx import patch, unpatch
+
+    captured = []
+    with mock_patch("tracea.patch.httpx._emit_event", side_effect=lambda e: captured.append(e)):
+        with respx.mock:
+            respx.post(OPENAI_CHAT_URL).mock(return_value=httpx.Response(200, json=OPENAI_RESPONSE))
+            patch()
+            client = httpx.Client()
+            resp = client.post(
+                OPENAI_CHAT_URL,
+                json={"model": "gpt-4o", "messages": [{"role": "user", "content": "hi"}]},
+            )
+            unpatch()
+
+    assert resp.status_code == 200
+    assert len(captured) == 1
+    ev = captured[0]
+    # Both content AND usage must be populated from a single body read
+    assert ev.content is not None, "content must be captured"
+    assert '"usage"' in ev.content
+    assert ev.tokens_used is not None, "tokens_used must be captured alongside content"
+    assert ev.tokens_used.total == OPENAI_RESPONSE["usage"]["total_tokens"]
+
+
+def test_extract_usage_from_text_direct():
+    """Unit test the text-based usage extractor directly."""
+    from tracea.patch.httpx import _extract_usage_from_text
+    import json
+
+    body = json.dumps(OPENAI_RESPONSE)
+    usage = _extract_usage_from_text(body)
+    assert usage is not None
+    assert usage["total_tokens"] == 5
+
+    # Malformed body returns None (no crash)
+    assert _extract_usage_from_text("not json") is None
+    # Body without usage returns None
+    assert _extract_usage_from_text(json.dumps({"choices": []})) is None

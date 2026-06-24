@@ -72,18 +72,27 @@ def _build_event(
     # Extract status code
     status_code = response.status_code if response else None
 
-    # Extract content
+    # Extract content — read the body ONCE into a local and reuse for both
+    # content and usage. A try/except (rather than an is_stream_consumed guard)
+    # is used because buffered responses (incl. test mocks) may report
+    # is_stream_consumed=True while still exposing a readable body; and a
+    # genuinely consumed streaming response will raise, which we safely skip.
     content = None
+    body_text: str | None = None
     if stream_content:
         content = stream_content
-    elif response and not response.is_stream_consumed:
-        content = response.text
+    elif response:
+        try:
+            body_text = response.text
+            content = body_text
+        except Exception:
+            body_text = None
 
-    # Extract token usage and cost
+    # Extract token usage and cost (from the already-read body_text, not response.json())
     tokens_used = None
     cost_usd = None
-    if response:
-        usage = _extract_usage(response)
+    if response and body_text:
+        usage = _extract_usage_from_text(body_text)
         if usage:
             tokens_used = TokenUsage(
                 input=usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0),
@@ -127,13 +136,19 @@ def _extract_model(request: httpx.Request, response: httpx.Response | None) -> s
     except Exception:
         return ""
 
-def _extract_usage(response: httpx.Response) -> dict | None:
-    """Extract token usage from response JSON."""
+def _extract_usage_from_text(body_text: str) -> dict | None:
+    """Extract token usage from response body text."""
     try:
-        if response.is_stream_consumed:
-            return None
-        data = response.json()
+        import json
+        data = json.loads(body_text)
         return data.get("usage") or data.get("anthropic_reasoning")  # anthropic uses different shape
+    except Exception:
+        return None
+
+def _extract_usage(response: httpx.Response) -> dict | None:
+    """Extract token usage from response JSON (backwards-compatible wrapper)."""
+    try:
+        return _extract_usage_from_text(response.text)
     except Exception:
         return None
 
