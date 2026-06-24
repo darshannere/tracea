@@ -334,3 +334,33 @@ async def test_drain_ordering_new_events_wait_for_drain(tmp_path):
     assert "if self._draining" in drain_source, "drain should check _draining to prevent concurrent drain"
 
     await disk_buffer.close()
+
+
+@pytest.mark.asyncio
+async def test_api_client_uses_server_url_not_base_url():
+    """Regression: TraceaAPIClient must POST events to server_url (the tracea
+    backend), not base_url (the LLM/proxy URL used for Azure). Previously
+    api.py used config.base_url, so setting TRACEA_BASE_URL for Azure sent
+    every event batch to the LLM host instead of the tracea server."""
+    import tracea
+    import tracea.config
+
+    # Distinct server vs base URLs — base_url points at an Azure/proxy host
+    tracea.config._config = None
+    tracea.init(
+        api_key="test-key",
+        server_url="http://tracea-server:8080",
+        base_url="https://my-azure.openai.azure.com",
+        user_id="",
+    )
+
+    client = TraceaAPIClient()
+    try:
+        http_client = await client._get_client()
+        # The httpx client base_url must be the tracea server, not the LLM URL
+        assert str(http_client.base_url).rstrip("/") == "http://tracea-server:8080", (
+            f"API client must target server_url, got {http_client.base_url}"
+        )
+    finally:
+        await client.close()
+        tracea.config._config = None

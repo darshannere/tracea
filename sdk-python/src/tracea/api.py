@@ -15,7 +15,7 @@ class TraceaAPIClient:
             if config.api_key:
                 headers["Authorization"] = f"Bearer {config.api_key}"
             self._client = httpx.AsyncClient(
-                base_url=config.base_url,
+                base_url=config.server_url,
                 headers=headers,
                 timeout=10.0,
             )
