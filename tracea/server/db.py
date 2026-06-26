@@ -277,9 +277,10 @@ async def flush_events() -> int:
             await _db.commit()
         except Exception:
             await _db.rollback()
-            # Put events back in buffer on failure — must hold the lock
-            async with _write_lock:
-                _write_buffer[:] = batch + _write_buffer
+            # Put events back in buffer on failure. We already hold _write_lock
+            # (acquired at the top of this function), so restore directly —
+            # re-acquiring the non-reentrant asyncio.Lock here would deadlock.
+            _write_buffer[:] = batch + _write_buffer
             raise
 
     return len(batch)
