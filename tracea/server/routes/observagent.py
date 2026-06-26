@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from tracea.server.db import get_db
+from tracea.server.auth import get_auth_user_id
 from typing import Optional
 import json
 import time
@@ -17,6 +18,7 @@ async def list_events(
     session_id: Optional[str] = None,
     user_id: Optional[str] = None,
     limit: int = Query(200, ge=1, le=1000),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     """Return tool events in ObservAgent-compatible format.
 
@@ -135,7 +137,7 @@ async def list_events(
 
 
 @router.get("/sessions")
-async def list_sessions_for_tree(user_id: Optional[str] = None):
+async def list_sessions_for_tree(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     """Return sessions with agent info for the left-hand tree panel."""
     db = await anext(get_db())
     where = "WHERE 1=1"
@@ -165,7 +167,7 @@ async def list_sessions_for_tree(user_id: Optional[str] = None):
 
 
 @router.get("/insights/cost-daily")
-async def cost_daily(user_id: Optional[str] = None):
+async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     db = await anext(get_db())
     where = "WHERE started_at >= date('now', '-6 days')"
     params = []
@@ -185,7 +187,7 @@ async def cost_daily(user_id: Optional[str] = None):
 
 
 @router.get("/insights/cost-by-agent")
-async def cost_by_agent(user_id: Optional[str] = None):
+async def cost_by_agent(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     db = await anext(get_db())
     where = "WHERE agent_id IS NOT NULL AND agent_id != ''"
     params = []
@@ -207,6 +209,7 @@ async def cost_by_agent(user_id: Optional[str] = None):
 @router.get("/insights/activity")
 async def activity_by_session(
     session_id: str = Query(...),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
     rows = await db.execute("""
@@ -225,6 +228,7 @@ async def activity_by_session(
 @router.get("/insights/tokens-over-time")
 async def tokens_over_time(
     session_id: str = Query(...),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
     rows = await db.execute("""
@@ -244,6 +248,7 @@ async def tokens_over_time(
 @router.get("/insights/error-rate")
 async def error_rate(
     session_id: str = Query(default=""),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
     # 5-minute buckets
@@ -266,6 +271,7 @@ async def error_rate(
 @router.get("/insights/latency-by-tool")
 async def latency_by_tool(
     session_id: str = Query(default=""),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
     params = [session_id, session_id]
@@ -315,7 +321,7 @@ async def latency_by_tool(
 
 
 @router.get("/insights/stalled-agents")
-async def stalled_agents(user_id: Optional[str] = None):
+async def stalled_agents(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     """Return sessions (treated as agents) that have not had an event in > 10 minutes
     and have not ended yet."""
     db = await anext(get_db())

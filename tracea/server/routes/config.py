@@ -1,10 +1,11 @@
 """Config API — YAML config read/write for Settings page."""
 import os
 import tempfile
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 
 from tracea.server.settings import get_rca_config, set_setting
+from tracea.server.auth import get_auth_user_id, require_admin
 
 router = APIRouter(prefix="/api/v1/config", tags=["config"])
 
@@ -53,14 +54,14 @@ def _write_yaml(path: str, content: str) -> None:
 
 
 @router.get("/rules")
-async def get_rules():
+async def get_rules(auth_user_id: str = Depends(get_auth_user_id)):
     """Return raw YAML content of detection_rules.yaml."""
     content = _read_yaml("detection_rules.yaml")
     return {"content": content}
 
 
 @router.put("/rules")
-async def put_rules(body: ConfigContent):
+async def put_rules(body: ConfigContent, admin_user_id: str = Depends(require_admin)):
     """Write new detection_rules.yaml content and trigger hot-reload."""
     # Validate YAML first
     try:
@@ -83,14 +84,14 @@ async def put_rules(body: ConfigContent):
 
 
 @router.get("/alerts")
-async def get_alerts():
+async def get_alerts(auth_user_id: str = Depends(get_auth_user_id)):
     """Return raw YAML content of alerts.yaml."""
     content = _read_yaml("alerts.yaml")
     return {"content": content}
 
 
 @router.put("/alerts")
-async def put_alerts(body: ConfigContent):
+async def put_alerts(body: ConfigContent, admin_user_id: str = Depends(require_admin)):
     """Write new alerts.yaml content and trigger hot-reload."""
     # Validate YAML first
     try:
@@ -113,7 +114,7 @@ async def put_alerts(body: ConfigContent):
 
 
 @router.get("/rca")
-async def get_rca():
+async def get_rca(auth_user_id: str = Depends(get_auth_user_id)):
     """Return current RCA backend configuration (api_key omitted)."""
     cfg = await get_rca_config()
     return {
@@ -126,7 +127,7 @@ async def get_rca():
 
 
 @router.put("/rca")
-async def put_rca(body: RCAConfigBody):
+async def put_rca(body: RCAConfigBody, admin_user_id: str = Depends(require_admin)):
     """Update RCA configuration in settings store."""
     valid_backends = {"disabled", "openai", "anthropic", "ollama"}
     if body.backend not in valid_backends:

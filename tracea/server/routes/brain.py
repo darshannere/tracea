@@ -4,10 +4,11 @@ import base64
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
 
 from tracea.server.db import get_db
+from tracea.server.auth import get_auth_user_id, require_admin
 
 router = APIRouter(prefix="/api/v1", tags=["brain"])
 
@@ -70,6 +71,7 @@ async def list_brain_entries(
     category: Optional[str] = None,
     user_id: Optional[str] = None,
     q: Optional[str] = None,
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     """List brain entries with cursor pagination and optional FTS5 search."""
     db = await anext(get_db())
@@ -160,7 +162,7 @@ async def list_brain_entries(
 
 
 @router.get("/brain/entries/{entry_id}", response_model=BrainEntryOut)
-async def get_brain_entry(entry_id: str):
+async def get_brain_entry(entry_id: str, auth_user_id: str = Depends(get_auth_user_id)):
     """Get a single brain entry by ID."""
     db = await anext(get_db())
     row = await db.execute("SELECT * FROM brain_entries WHERE id = ?", (entry_id,))
@@ -182,7 +184,7 @@ async def get_brain_entry(entry_id: str):
 
 
 @router.delete("/brain/entries/{entry_id}")
-async def delete_brain_entry(entry_id: str):
+async def delete_brain_entry(entry_id: str, admin_user_id: str = Depends(require_admin)):
     """Delete a brain entry (and its FTS5 index via trigger)."""
     db = await anext(get_db())
     cursor = await db.execute("DELETE FROM brain_entries WHERE id = ?", (entry_id,))
@@ -196,6 +198,7 @@ async def delete_brain_entry(entry_id: str):
 async def get_brain_graph(
     user_id: Optional[str] = None,
     min_confidence: float = Query(0.0, ge=0.0, le=1.0),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     """Return graph topology: nodes = entries, edges = shared sessions."""
     db = await anext(get_db())

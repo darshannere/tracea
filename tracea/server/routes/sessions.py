@@ -1,7 +1,8 @@
 import base64
 import json
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from tracea.server.db import get_db
+from tracea.server.auth import get_auth_user_id, require_admin
 from typing import Optional
 
 router = APIRouter(prefix="/api/v1", tags=["sessions"])
@@ -24,6 +25,7 @@ async def list_sessions(
     cursor: Optional[str] = None,
     agent_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
 
@@ -72,6 +74,7 @@ async def list_sessions(
 async def get_session_events(
     session_id: str,
     limit: int = Query(500, ge=1, le=5000),
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
     rows = await db.execute(
@@ -86,7 +89,7 @@ async def get_session_events(
 
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str):
+async def delete_session(session_id: str, admin_user_id: str = Depends(require_admin)):
     db = await anext(get_db())
     await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (session_id,))
     await db.execute("DELETE FROM issues WHERE session_id = ?", (session_id,))

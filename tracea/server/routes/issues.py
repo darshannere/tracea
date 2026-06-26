@@ -1,7 +1,8 @@
 import base64
 import json
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from tracea.server.db import get_db
+from tracea.server.auth import get_auth_user_id
 from typing import Optional
 
 router = APIRouter(prefix="/api/v1", tags=["issues"])
@@ -21,6 +22,7 @@ async def list_issues(
     session_id: Optional[str] = None,
     agent_id: Optional[str] = None,
     user_id: Optional[str] = None,
+    auth_user_id: str = Depends(get_auth_user_id),
 ):
     db = await anext(get_db())
     if cursor:

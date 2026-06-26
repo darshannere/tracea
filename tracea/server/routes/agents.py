@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from pydantic import BaseModel
 from tracea.server.db import get_db
+from tracea.server.auth import get_auth_user_id, require_admin
 from tracea.server.models import ApiKeyCreate
 from typing import Optional
 import secrets
@@ -16,7 +17,7 @@ class UserCreate(BaseModel):
 
 
 @router.get("/agents")
-async def list_agents(user_id: Optional[str] = None):
+async def list_agents(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     db = await anext(get_db())
     where_clause = "WHERE agent_id IS NOT NULL AND agent_id != ''"
     params = []
@@ -43,7 +44,7 @@ async def list_agents(user_id: Optional[str] = None):
 
 
 @router.get("/users")
-async def list_users():
+async def list_users(admin_user_id: str = Depends(require_admin)):
     """Return all team members from the users table."""
     db = await anext(get_db())
     rows = await db.execute("""
@@ -56,7 +57,7 @@ async def list_users():
 
 
 @router.post("/users")
-async def create_user(body: UserCreate):
+async def create_user(body: UserCreate, admin_user_id: str = Depends(require_admin)):
     """Add a new team member."""
     db = await anext(get_db())
     try:
@@ -71,7 +72,7 @@ async def create_user(body: UserCreate):
 
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: str):
+async def delete_user(user_id: str, admin_user_id: str = Depends(require_admin)):
     """Remove a team member."""
     db = await anext(get_db())
     await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
@@ -84,7 +85,7 @@ async def delete_user(user_id: str):
 # ---------------------------------------------------------------------------
 
 @router.get("/api-keys")
-async def list_api_keys():
+async def list_api_keys(admin_user_id: str = Depends(require_admin)):
     """List all API keys (hashes redacted)."""
     db = await anext(get_db())
     rows = await db.execute("""
@@ -105,7 +106,7 @@ async def list_api_keys():
 
 
 @router.post("/api-keys")
-async def create_api_key(body: ApiKeyCreate):
+async def create_api_key(body: ApiKeyCreate, admin_user_id: str = Depends(require_admin)):
     """Create a new API key for a user. Returns the plaintext key once."""
     db = await anext(get_db())
     # Verify user exists
@@ -125,7 +126,7 @@ async def create_api_key(body: ApiKeyCreate):
 
 
 @router.delete("/api-keys/{key_hash}")
-async def revoke_api_key(key_hash: str):
+async def revoke_api_key(key_hash: str, admin_user_id: str = Depends(require_admin)):
     """Revoke an API key by its full hash."""
     db = await anext(get_db())
     await db.execute("DELETE FROM api_keys WHERE key_hash = ?", (key_hash,))
