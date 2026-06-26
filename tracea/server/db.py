@@ -71,6 +71,7 @@ async def init_db() -> aiosqlite.Connection:
     await _db.execute("PRAGMA busy_timeout=5000")
     await _db.execute("PRAGMA cache_size=-64000")
     await _db.execute("PRAGMA temp_store=MEMORY")
+    await _db.execute("PRAGMA foreign_keys=ON")  # enable ON DELETE CASCADE etc.
 
     await _db.execute("PRAGMA wal_autocheckpoint=0")  # We manage checkpoints manually
 

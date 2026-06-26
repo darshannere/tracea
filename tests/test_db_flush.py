@@ -98,3 +98,40 @@ def test_flush_events_succeeds_after_recovery(monkeypatch):
     flushed = asyncio.run(asyncio.wait_for(dbmod.flush_events(), timeout=5.0))
     assert flushed == 1
     assert len(dbmod._write_buffer) == 0
+
+
+def test_foreign_key_cascade_delete_works():
+    """Regression: PRAGMA foreign_keys=ON must be set so ON DELETE CASCADE fires.
+
+    Without the pragma, FK declarations are no-ops and deleting a parent row
+    leaves orphaned children. Verify via api_keys → users cascade.
+    """
+    import aiosqlite
+
+    async def _run():
+        db = dbmod._db
+        # Insert a user + a child api_key row
+        await db.execute(
+            "INSERT INTO users (user_id, name, email) VALUES (?, ?, ?)",
+            ("cascade-user", "Cascade", "c@example.com"),
+        )
+        await db.execute(
+            "INSERT INTO api_keys (key_hash, user_id) VALUES (?, ?)",
+            ("hash", "cascade-user"),
+        )
+        await db.commit()
+
+        # Confirm FK enforcement is actually on for this connection
+        cursor = await db.execute("PRAGMA foreign_keys")
+        row = await cursor.fetchone()
+        assert row[0] == 1, f"foreign_keys pragma must be ON, got {row[0]}"
+
+        # Delete the parent — child must cascade-delete
+        await db.execute("DELETE FROM users WHERE user_id = ?", ("cascade-user",))
+        await db.commit()
+
+        cur_key = await db.execute("SELECT COUNT(*) FROM api_keys WHERE user_id = ?", ("cascade-user",))
+        count = (await cur_key.fetchone())[0]
+        assert count == 0, "api_keys row should have been cascade-deleted"
+
+    asyncio.run(_run())

@@ -167,6 +167,9 @@ async def _open_db() -> aiosqlite.Connection:
 
     db = await aiosqlite.connect(DB_PATH, isolation_level=None)
     db.row_factory = aiosqlite.Row
+    # Per-connection pragma — SQLite foreign keys are off by default and must be
+    # enabled on every connection for ON DELETE CASCADE to take effect.
+    await db.execute("PRAGMA foreign_keys=ON")
     return db
 
 
