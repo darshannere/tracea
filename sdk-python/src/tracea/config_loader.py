@@ -33,7 +33,16 @@ def discover_config(path: Path | None = None) -> dict[str, Any]:
 
 
 def save_config(data: dict[str, Any], path: Path | None = None) -> None:
-    """Write config to ``~/.tracea/config.json``, creating parent dirs if needed."""
+    """Write config to ``~/.tracea/config.json``, creating parent dirs if needed.
+
+    The file contains the API key in plaintext, so permissions are locked down:
+    directory 0o700 and file 0o600 (owner-only). chmod is applied explicitly
+    after creation to defeat the process umask.
+    """
     target = path or DEFAULT_CONFIG_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
+    # Enforce owner-only dir regardless of umask (mkdir mode is masked)
+    os.chmod(target.parent, 0o700)
     target.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    # Enforce owner-only file regardless of umask (write_text default is 0o666)
+    os.chmod(target, 0o600)

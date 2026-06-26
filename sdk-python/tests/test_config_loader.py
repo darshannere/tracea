@@ -39,3 +39,25 @@ class TestSaveConfig:
         assert nested.exists()
         loaded = json.loads(nested.read_text())
         assert loaded["user_id"] == "bob"
+
+    def test_file_permissions_are_owner_only(self, tmp_path):
+        """Regression: config contains the plaintext API key, so the file must
+        be 0o600 and the parent dir 0o700. Previously save_config used default
+        modes (0o644 / world-readable), leaking the key to other users."""
+        nested = tmp_path / ".tracea" / "config.json"
+        save_config({"api_key": "secret"}, nested)
+
+        file_mode = nested.stat().st_mode & 0o777
+        dir_mode = nested.parent.stat().st_mode & 0o777
+        assert file_mode == 0o600, f"config file must be 0o600, got {oct(file_mode)}"
+        assert dir_mode == 0o700, f"config dir must be 0o700, got {oct(dir_mode)}"
+
+    def test_existing_file_permissions_tightened_on_resave(self, tmp_path):
+        """Re-saving an existing world-readable file must tighten it to 0o600."""
+        cfg = tmp_path / "config.json"
+        cfg.write_text('{"api_key": "old"}')
+        os.chmod(cfg, 0o644)  # world-readable, the insecure state
+        assert (cfg.stat().st_mode & 0o777) == 0o644
+
+        save_config({"api_key": "new"}, cfg)
+        assert (cfg.stat().st_mode & 0o777) == 0o600
