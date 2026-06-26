@@ -44,7 +44,14 @@ const DEFAULT_CONFIG: TraceaConfig = {
   userId: process.env.TRACEA_USER_ID || DISCOVERED.userId || "",
 };
 
-const sessionId = `${DEFAULT_CONFIG.agentId}-${Date.now()}-${crypto.randomUUID()}`;
+// Mutable: rotated on every session.start so each session gets its own id.
+// Previously this was a module-level const, so every session in the process
+// lifetime shared one id and their events were merged together.
+let sessionId = newSessionId();
+
+function newSessionId(): string {
+  return `${DEFAULT_CONFIG.agentId}-${Date.now()}-${crypto.randomUUID()}`;
+}
 
 async function postEvent(
   eventType: string,
@@ -100,10 +107,17 @@ const traceaPlugin: Plugin = {
   version: "0.1.0",
 
   async onLoad() {
-    await postEvent("session_start");
+    // Session start is emitted by the session.start hook (which also rotates
+    // sessionId). Nothing to do here — kept for plugin lifecycle completeness.
   },
 
   hooks: {
+    "session.start": async () => {
+      // Rotate to a fresh session id for each new session
+      sessionId = newSessionId();
+      await postEvent("session_start");
+    },
+
     "tool.execute.before": async (ctx: HookContext) => {
       const toolName = ctx.tool?.name || "unknown";
       const toolCallId = ctx.toolCallId || crypto.randomUUID();

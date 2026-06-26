@@ -57,3 +57,42 @@ def test_session_id_not_the_known_constant():
     import uuid
     broken = str(uuid.uuid5(uuid.NAMESPACE_DNS, "$(hostname)-$$"))
     assert sid != broken, f"session id collapsed to the constant {broken}"
+
+
+# ---------------------------------------------------------------------------
+# OpenCode plugin — sessionId rotation (Wave 1 fix #9)
+# ---------------------------------------------------------------------------
+
+OPENCODE_PLUGIN = "tracea-plugins/opencode/tracea-plugin.ts"
+
+
+def _read_opencode_plugin():
+    import os
+    p = os.path.join(os.path.dirname(__file__), "..", OPENCODE_PLUGIN)
+    with open(p) as f:
+        return f.read()
+
+
+def test_opencode_session_id_is_mutable():
+    """Regression: sessionId must be declared with `let` (not const) so it can
+    be rotated. Previously it was a module-level const, so every session in the
+    process lifetime shared one id."""
+    contents = _read_opencode_plugin()
+    assert re.search(r"\blet\s+sessionId\b", contents), (
+        "sessionId must be declared with `let` so it can be rotated per session"
+    )
+    assert not re.search(r"\bconst\s+sessionId\b", contents), (
+        "sessionId must not be const (would merge all sessions into one)"
+    )
+
+
+def test_opencode_rotates_session_id_on_session_start():
+    """A session.start hook must reassign sessionId so each session is distinct."""
+    contents = _read_opencode_plugin()
+    assert '"session.start"' in contents or "'session.start'" in contents, (
+        "plugin must register a session.start hook"
+    )
+    # The hook body must reassign sessionId (rotate), not just read it
+    assert re.search(r"sessionId\s*=\s*newSessionId\(\)", contents), (
+        "session.start must rotate sessionId via reassignment"
+    )
