@@ -41,8 +41,10 @@ fi
 SERVER_URL="${SERVER_URL:-http://localhost:8080}"
 AGENT_ID="${AGENT_ID:-claude-code}"
 
-# Stable session ID for this Claude process (hostname + pid)
-SESSION_ID="${TRACEA_SESSION_ID:-$(python3 -c "import uuid; print(uuid.uuid5(uuid.NAMESPACE_DNS, '\$(hostname)-\$$'))")}"
+# Stable session ID for this Claude process (hostname + pid).
+# NOTE: $(hostname) and $$ must be expanded by bash here — do NOT backslash-escape
+# them, or every process hashes the same literal string and gets one constant UUID.
+SESSION_ID="${TRACEA_SESSION_ID:-$(python3 -c "import uuid; print(uuid.uuid5(uuid.NAMESPACE_DNS, '$(hostname)-$$'))")}"
 
 tracea_post_event() {
   local event_type="$1"
