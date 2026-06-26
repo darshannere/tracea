@@ -1,4 +1,4 @@
--- 011_add_settings_table.sql: Create settings table for app configuration
+-- 013_add_settings_table.sql: Create settings table for app configuration
 
 CREATE TABLE IF NOT EXISTS settings (
     key        TEXT PRIMARY KEY,

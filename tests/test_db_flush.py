@@ -135,3 +135,22 @@ def test_foreign_key_cascade_delete_works():
         assert count == 0, "api_keys row should have been cascade-deleted"
 
     asyncio.run(_run())
+
+
+def test_migration_numbers_are_unique():
+    """Regression: migration filename prefixes (NNN_) must be unique.
+
+    Two migrations shared the 011 prefix (011_add_api_keys_table and
+    011_add_settings_table), which makes ordering ambiguous and risks
+    shadowing. assert no two files share a prefix."""
+    from pathlib import Path
+
+    migrations_dir = Path(dbmod.__file__).parent / "migrations"
+    files = sorted(migrations_dir.glob("[0-9][0-9][0-9]_*.sql"))
+    prefixes = [f.name[:3] for f in files]
+    assert len(prefixes) == len(set(prefixes)), (
+        f"Duplicate migration prefixes: {prefixes}"
+    )
+    # Sanity: the settings migration is now 013, not a second 011
+    assert not (migrations_dir / "011_add_settings_table.sql").exists()
+    assert (migrations_dir / "013_add_settings_table.sql").exists()
