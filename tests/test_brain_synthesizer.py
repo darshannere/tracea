@@ -95,6 +95,32 @@ class TestWorkerLifecycle:
         await asyncio.sleep(0.1)
         await stop_worker()
 
+    @pytest.mark.asyncio
+    async def test_worker_survives_poll_cycle(self, monkeypatch):
+        """Regression: the worker loop must not crash on the first poll.
+
+        Previously the loop referenced config.enabled (no such field on
+        RCABackendConfig) → AttributeError killed the worker task silently, so
+        brain_status='pending' rows piled up forever. With the fix the disabled
+        check uses only config.backend, and the task stays alive across polls.
+        """
+        import tracea.server.brain.synthesizer as synth
+
+        # Make the loop iterate quickly
+        monkeypatch.setattr(synth, "_POLL_INTERVAL", 0.01)
+
+        await start_worker()
+        try:
+            # Allow several poll iterations
+            await asyncio.sleep(0.1)
+            # The worker task must still be alive (not killed by an exception)
+            assert synth._worker_task is not None
+            assert not synth._worker_task.done(), (
+                f"worker died unexpectedly: {synth._worker_task.exception()!r}"
+            )
+        finally:
+            await stop_worker()
+
 
 class TestProcessSession:
     @pytest.mark.asyncio

@@ -343,7 +343,7 @@ async def _brain_worker_loop() -> None:
         await asyncio.sleep(_POLL_INTERVAL)
 
         config = await _load_config()
-        if not config.enabled or config.backend == "disabled":
+        if config.backend == "disabled":
             continue
 
         try:
