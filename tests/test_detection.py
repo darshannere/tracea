@@ -84,3 +84,53 @@ async def test_detection_async_nonblocking(sample_event):
     # Here we just verify the task runs without blocking the caller
     await task
     assert detection_done == True
+
+
+# ---------------------------------------------------------------------------
+# SQL injection protection in session-rule aggregation (Wave 2 fix #11)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_session_rule_count_field_whitelist_rejects_injection(fresh_db):
+    """Regression: count_field is user-writable via PUT /config/rules and was
+    interpolated raw into SQL, enabling injection. It must be whitelisted."""
+    from tracea.server.detection.engine import _evaluate_session_rule
+    from tracea.server.db import get_db
+
+    # Seed a session with one event so the query has something to scan
+    db = await get_db().__anext__()
+    await db.execute(
+        "INSERT INTO sessions (session_id) VALUES (?)", ("sess-1",),
+    )
+    await db.execute(
+        "INSERT INTO events (event_id, session_id, sequence, timestamp, type, cost_usd) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        ("e1", "sess-1", 1, "2024-01-01T00:00:00Z", "chat.completion", 1.5),
+    )
+    await db.commit()
+
+    # 1. A valid count_field evaluates normally
+    result = await _evaluate_session_rule(
+        {"count_field": "cost_usd", "aggregation": "sum", "threshold": 1, "op": "gte"},
+        "sess-1",
+    )
+    assert result is True, "valid count_field (cost_usd) should aggregate"
+
+    # 2. Injection attempt in count_field must be rejected, not executed
+    injection = "cost_usd) FROM events; DROP TABLE sessions; --"
+    result_inj = await _evaluate_session_rule(
+        {"count_field": injection, "aggregation": "sum", "threshold": 0, "op": "gt"},
+        "sess-1",
+    )
+    assert result_inj is False, "injection attempt must be rejected by whitelist"
+
+    # The sessions table must still exist (DROP TABLE did not execute)
+    cursor = await db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sessions'")
+    assert await cursor.fetchone() is not None, "sessions table must survive injection attempt"
+
+    # 3. An arbitrary unknown column is also rejected
+    result_unknown = await _evaluate_session_rule(
+        {"count_field": "password", "aggregation": "sum", "threshold": 0, "op": "gt"},
+        "sess-1",
+    )
+    assert result_unknown is False, "unknown column must be rejected by whitelist"

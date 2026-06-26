@@ -93,16 +93,27 @@ async def _evaluate_session_rule(sess: dict, session_id: str) -> bool:
     if not session_id:
         return False
 
+    # Whitelist count_field against the set of numeric event columns.
+    # count_field originates from user-writable rule config (PUT /config/rules),
+    # so interpolating it raw into SQL allowed arbitrary SQL injection
+    # (including ATTACH DATABASE RCE primitives).
+    ALLOWED_COUNT_FIELDS = frozenset({
+        'cost_usd', 'duration_ms',
+        'input_tokens', 'output_tokens', 'total_tokens',
+    })
+    if count_field not in ALLOWED_COUNT_FIELDS:
+        return False
+
     from tracea.server.db import get_db
 
-    # Build query for aggregation
+    # Build query for aggregation — count_field is now whitelist-validated
     col_map = {
         'sum': f'SUM({count_field})',
         'count': 'COUNT(*)',
         'max': f'MAX({count_field})',
         'avg': f'AVG({count_field})',
     }
-    col = col_map.get(aggregation, count_field)
+    col = col_map.get(aggregation, f'SUM({count_field})')
 
     try:
         db_gen = get_db()
