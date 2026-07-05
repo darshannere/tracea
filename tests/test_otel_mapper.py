@@ -247,3 +247,102 @@ def test_mapper_robustness():
     assert len(events_bad) == 1
     assert events_bad[0].type == "error"
     assert "OTLP log mapping failed" in events_bad[0].error
+
+
+def test_is_genai_inference_detection():
+    # Detect via event.name
+    log1 = {"log_attrs": {"event.name": "gen_ai.client.inference.operation.details"}}
+    log2 = {"log_attrs": {"event.name": "other_event"}}
+
+    events1 = logs_to_events([log1])
+    assert len(events1) == 1
+    assert events1[0].metadata["event.name"] == "gen_ai.client.inference.operation.details"
+
+    events2 = logs_to_events([log2])
+    assert len(events2) == 0
+
+
+def test_genai_inference_mapping(monkeypatch):
+    monkeypatch.setenv("TRACEA_CAPTURE_CONTENT", "1")
+    log = {
+        "scope_name": "io.opentelemetry.contrib.genai",
+        "timestamp_unix_nano": 1700000000_000000000,
+        "body": "",
+        "resource_attrs": {
+            "gen_ai.system": "gemini",
+            "session.id": "gem-sess-1",
+        },
+        "log_attrs": {
+            "event.name": "gen_ai.client.inference.operation.details",
+            "gen_ai.request.model": "gemini-2.5-pro",
+            "gen_ai.usage.input_tokens": 42,
+            "gen_ai.usage.output_tokens": 87,
+            "gen_ai.system_instructions": "You are Gemini CLI.",
+            "gen_ai.input.messages": [
+                {"role": "user", "parts": [{"type": "text", "text": "hello"}]},
+                {"role": "user", "parts": [{"type": "text", "text": "how are you?"}]},
+            ],
+            "gen_ai.output.messages": [
+                {"role": "assistant", "parts": [{"type": "text", "text": "Hi! I am doing well."}]},
+            ],
+        },
+    }
+    events = logs_to_events([log], user_id="u1")
+    assert len(events) == 4
+    assert [e.role for e in events] == ["system", "user", "user", "assistant"]
+    assert events[0].content == "You are Gemini CLI."
+    assert events[1].content == "hello"
+    assert events[2].content == "how are you?"
+    assert events[3].content == "Hi! I am doing well."
+
+    for e in events:
+        assert e.provider == "gemini-cli"
+        assert e.model == "gemini-2.5-pro"
+        assert e.session_id == "gem-sess-1"
+        assert e.user_id == "u1"
+        assert e.tokens_used is not None
+        assert e.tokens_used.input == 42
+        assert e.tokens_used.output == 87
+        assert e.tokens_used.total == 129
+        assert e.cost_usd == pytest.approx(129 * 0.00001)
+
+    # TRACEA_CAPTURE_CONTENT = 0 gates content and skips system_instructions emission entirely
+    monkeypatch.setenv("TRACEA_CAPTURE_CONTENT", "0")
+    events = logs_to_events([log], user_id="u1")
+    assert len(events) == 3  # No system instructions event since content was skipped
+    assert [e.role for e in events] == ["user", "user", "assistant"]
+    for e in events:
+        assert e.content is None
+
+
+def test_genai_role_normalization():
+    from tracea.server.otel.mapper import _normalize_role
+    assert _normalize_role("model") == "assistant"
+    assert _normalize_role("bot") == "assistant"
+    assert _normalize_role("user") == "user"
+    assert _normalize_role("system") == "system"
+    assert _normalize_role("unknown-role") == "user"
+
+
+def test_genai_empty_messages():
+    log = {
+        "scope_name": "genai",
+        "log_attrs": {"event.name": "gen_ai.client.inference.operation.details"},
+        "resource_attrs": {},
+        "timestamp_unix_nano": 0,
+    }
+    events = logs_to_events([log])
+    assert len(events) == 1
+    assert events[0].content is None
+    assert events[0].provider == "unknown"
+
+
+def test_genai_provider_mapping():
+    from tracea.server.otel.mapper import _genai_provider
+    assert _genai_provider({"gen_ai.system": "gemini"}, {}) == "gemini-cli"
+    assert _genai_provider({"gen_ai.system": "google"}, {}) == "gemini-cli"
+    assert _genai_provider({"gen_ai.system": "anthropic"}, {}) == "claude-code"
+    assert _genai_provider({"gen_ai.system": "openai"}, {}) == "openai"
+    assert _genai_provider({}, {"gen_ai.system": "ollama"}) == "ollama"
+    assert _genai_provider({}, {"gen_ai.system": "unknown-sys"}) == "unknown"
+

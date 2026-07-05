@@ -27,7 +27,8 @@ def logs_to_events(logs: list[dict], user_id: str = "") -> list[TracedEvent]:
                 raise TypeError("Log record must be a dict")
             if _is_claude_code(log):
                 events.extend(_claude_code_log_to_events(log, user_id, capture_content))
-            # Task 5 adds: elif _is_genai_inference(log): events.extend(_genai_log_to_events(...))
+            elif _is_genai_inference(log):
+                events.extend(_genai_log_to_events(log, user_id, capture_content))
         except Exception as exc:
             # Never let one bad log drop the whole batch
             events.append(_error_event(log, str(exc), user_id))
@@ -205,6 +206,170 @@ def _from_anthropic_response(
         cost_usd=cost,
         **{**common, "metadata": meta},
     )
+
+
+# ---------------------------------------------------------------------------
+# Generic GenAI inference event (Gemini CLI + spec-compliant clients)
+# ---------------------------------------------------------------------------
+
+_GENAI_INFERENCE_EVENT = "gen_ai.client.inference.operation.details"
+
+
+def _is_genai_inference(log: dict) -> bool:
+    attrs = log.get("log_attrs", {}) or {}
+    return attrs.get("event.name") == _GENAI_INFERENCE_EVENT
+
+
+def _genai_log_to_events(
+    log: dict, user_id: str, capture_content: bool
+) -> list[TracedEvent]:
+    attrs = log.get("log_attrs", {}) or {}
+    resource_attrs = log.get("resource_attrs", {}) or {}
+    ts = _ns_to_datetime(log.get("timestamp_unix_nano", 0))
+
+    model = attrs.get("gen_ai.response.model") or attrs.get("gen_ai.request.model") or ""
+    provider = _genai_provider(resource_attrs, attrs)
+    session_id = _derive_genai_session_id(log, resource_attrs)
+
+    # Token usage
+    in_tok = _to_int(attrs.get("gen_ai.usage.input_tokens"))
+    out_tok = _to_int(attrs.get("gen_ai.usage.output_tokens"))
+    tokens = None
+    if in_tok or out_tok:
+        tokens = TokenUsage(input=in_tok, output=out_tok, total=in_tok + out_tok)
+    cost = _estimate_cost(tokens)
+
+    common = dict(
+        session_id=session_id,
+        agent_id=str(resource_attrs.get("agent_id") or provider),
+        user_id=user_id,
+        timestamp=ts,
+        provider=provider,
+        model=model,
+        tokens_used=tokens,
+        cost_usd=cost,
+        metadata={
+            "integration": "otlp",
+            "source": provider,
+            "event.name": _GENAI_INFERENCE_EVENT,
+            "response_id": attrs.get("gen_ai.response.id"),
+            "trace_id": log.get("trace_id"),
+            "span_id": log.get("span_id"),
+        },
+    )
+
+    events: list[TracedEvent] = []
+
+    # System instructions → role=system
+    sys_instr = attrs.get("gen_ai.system_instructions")
+    if capture_content and sys_instr:
+        events.append(TracedEvent(
+            event_id=str(uuid4()),
+            type="chat.completion", role="system",
+            content=_stringify(sys_instr),
+            **common,
+        ))
+
+    # Input messages → one chat.completion per message with its role
+    for msg in attrs.get("gen_ai.input.messages", []) or []:
+        if not isinstance(msg, dict):
+            continue
+        events.append(TracedEvent(
+            event_id=str(uuid4()),
+            type="chat.completion",
+            role=_normalize_role(msg.get("role", "user")),
+            content=_flatten_genai_parts(msg.get("parts", [])) if capture_content else None,
+            **common,
+        ))
+
+    # Output messages → role=assistant
+    for msg in attrs.get("gen_ai.output.messages", []) or []:
+        if not isinstance(msg, dict):
+            continue
+        events.append(TracedEvent(
+            event_id=str(uuid4()),
+            type="chat.completion",
+            role="assistant",
+            content=_flatten_genai_parts(msg.get("parts", [])) if capture_content else None,
+            **common,
+        ))
+
+    # If we produced nothing structured, emit a metadata-only marker so the
+    # session still shows up in the dashboard.
+    if not events:
+        events.append(TracedEvent(
+            event_id=str(uuid4()),
+            type="chat.completion",
+            content=None,
+            **common,
+        ))
+
+    return events
+
+
+def _flatten_genai_parts(parts: list) -> str:
+    """Concatenate text parts. Tool-call parts are skipped (handled via spans in Task 6)."""
+    if not parts:
+        return ""
+    out = []
+    for part in parts:
+        if not isinstance(part, dict):
+            out.append(_stringify(part))
+            continue
+        ptype = part.get("type")
+        if ptype == "text" or "text" in part:
+            out.append(str(part.get("text", "")))
+        # tool_call / tool_call_response parts → ignored here; Task 6 emits
+        # separate tool_call/tool_result events from the spans signal.
+    return "\n".join(s for s in out if s)
+
+
+def _normalize_role(role: str) -> str:
+    r = (role or "user").lower()
+    if r in ("user", "assistant", "system"):
+        return r
+    # Common alternates: "model" (Gemini), "bot", "machine"
+    if r in ("model", "bot"):
+        return "assistant"
+    return "user"
+
+
+def _to_int(v) -> int:
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _genai_provider(resource_attrs: dict, log_attrs: dict) -> str:
+    """Resolve the tracea provider string. Maps OTel gen_ai.system values."""
+    sys_val = (resource_attrs.get("gen_ai.system")
+               or log_attrs.get("gen_ai.system")
+               or "")
+    sys_val = str(sys_val).lower()
+    mapping = {
+        "gemini": "gemini-cli",
+        "google": "gemini-cli",
+        "anthropic": "claude-code",
+        "openai": "openai",
+        "azure_openai": "azure_openai",
+        "ollama": "ollama",
+    }
+    # TracedEvent.provider is a closed Literal — unknown gen_ai.system values
+    # MUST fall back to "unknown" or pydantic raises and the whole log becomes
+    # an error event.
+    return mapping.get(sys_val, "unknown")
+
+
+def _derive_genai_session_id(log: dict, resource_attrs: dict) -> str:
+    """Gemini CLI sets session.id and process.id in resource attributes."""
+    for key in ("session.id", "session_id", "process.id", "tracea.session_id"):
+        val = resource_attrs.get(key)
+        if val:
+            return str(val)
+    if log.get("trace_id"):
+        return f"trace-{log['trace_id']}"
+    return f"unknown-{uuid4()}"
 
 
 # ---------------------------------------------------------------------------
