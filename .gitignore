@@ -24,6 +24,7 @@ tracea-mcp/_t.py
 
 # Internal / dev artifacts
 .planning/
+PLAN.md
 .playwright-mcp/
 bugs.md
 BUGFIX_PLAN.md
