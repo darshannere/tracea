@@ -319,7 +319,7 @@ async def _process_issue(backend: RCABackend, config: RCABackendConfig, custom_p
 
         # 2. Call LLM (DB is closed)
         prompt = build_rca_prompt(ctx, custom_prompt, redact_content=config.redact_content)
-        rca_text = await backend.analyze(ctx, prompt=prompt, max_tokens=config.max_tokens)
+        rca_text = await backend.analyze(prompt=prompt, max_tokens=config.max_tokens)
 
         # 3. Try to parse structured output
         rca_structured = None

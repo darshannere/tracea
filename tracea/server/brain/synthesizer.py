@@ -207,7 +207,6 @@ async def _process_session(backend: RCABackend, session: dict, custom_prompt: st
         # 4. Build prompt and call LLM
         prompt = build_brain_prompt(summary, custom_prompt)
         raw_response = await backend.analyze(
-            context=None,  # type: ignore[arg-type]
             prompt=prompt,
             max_tokens=2048,
             json_mode=True,

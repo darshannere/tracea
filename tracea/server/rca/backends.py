@@ -1,18 +1,17 @@
 """RCA backends: disabled, ollama, openai, anthropic."""
 import os
 from abc import ABC, abstractmethod
-from typing import Any
 
 import httpx
 
-from tracea.server.rca.models import RCAContext, RCABackendConfig
+from tracea.server.rca.models import RCABackendConfig
 
 
 class RCABackend(ABC):
     """Abstract RCA backend. All methods are async."""
 
     @abstractmethod
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
+    async def analyze(self, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         """Returns RCA text content, or raises on failure.
 
         Args:
@@ -23,53 +22,15 @@ class RCABackend(ABC):
         ...
 
 
-class DisabledBackend(RCABackend):
-    """No-op backend. Always returns empty string."""
-
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
-        return ""
-
-
-class OllamaBackend(RCABackend):
-    """Ollama backend via OpenAI-compatible API."""
-
-    def __init__(self, base_url: str, model: str):
-        self.base_url = base_url.rstrip("/")
-        self.model = model or "llama3"
-
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
-        """Call Ollama via OpenAI-compatible chat completions endpoint."""
-        body: dict = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": "You are a DevOps root-cause analyst."},
-                {"role": "user", "content": prompt or ""},
-            ],
-            "stream": False,
-            "max_tokens": max_tokens,
-        }
-        # Ollama (via OpenAI compat) may not fully support json_mode;
-        # include it if requested but don't fail if unsupported.
-        if json_mode:
-            body["response_format"] = {"type": "json_object"}
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                f"{self.base_url}/chat/completions",
-                json=body,
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
-
-
 class OpenAIBackend(RCABackend):
-    """OpenAI cloud backend."""
+    """OpenAI-compatible backend (supports OpenAI cloud, Ollama, etc.)."""
 
-    def __init__(self, model: str, api_key: str):
+    def __init__(self, model: str, api_key: str | None = None, base_url: str | None = None):
         self.model = model or "gpt-4o"
         self.api_key = api_key
+        self.base_url = (base_url or "https://api.openai.com/v1").rstrip("/")
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
+    async def analyze(self, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         """Call OpenAI chat completions API."""
         body: dict = {
             "model": self.model,
@@ -82,13 +43,15 @@ class OpenAIBackend(RCABackend):
         }
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+            
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
+                f"{self.base_url}/chat/completions",
+                headers=headers,
                 json=body,
             )
             response.raise_for_status()
@@ -104,7 +67,7 @@ class AnthropicBackend(RCABackend):
         self.api_key = api_key
         self.base_url = (base_url or "https://api.anthropic.com").rstrip("/")
 
-    async def analyze(self, context: RCAContext, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
+    async def analyze(self, prompt: str | None = None, max_tokens: int = 2048, json_mode: bool = False) -> str:
         """Call Anthropic messages API."""
         body: dict = {
             "model": self.model,
@@ -113,10 +76,6 @@ class AnthropicBackend(RCABackend):
                 {"role": "user", "content": prompt or ""},
             ],
         }
-        # Anthropic supports a beta headers approach for structured output;
-        # for now we include the instruction in the prompt itself and do
-        # not set a native json_mode param, relying on markdown extraction.
-        # TODO: adopt Anthropic's native structured output when stable.
         _ = json_mode  # acknowledged but not used natively yet
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -130,15 +89,13 @@ class AnthropicBackend(RCABackend):
             )
             response.raise_for_status()
             data = response.json()
-            # Anthropic-compatible APIs may return thinking blocks before text blocks
             for block in data.get("content", []):
                 if block.get("type") == "text" and "text" in block:
                     return block["text"]
-            # Fallback to first content block
             return data["content"][0].get("text", "")
 
 
-def load_backend(config: RCABackendConfig) -> RCABackend:
+def load_backend(config: RCABackendConfig) -> RCABackend | None:
     """Factory: instantiate the right backend from config."""
     if not isinstance(config, RCABackendConfig):
         raise TypeError("config must be RCABackendConfig")
@@ -146,11 +103,11 @@ def load_backend(config: RCABackendConfig) -> RCABackend:
     backend_type = config.backend
 
     if backend_type == "disabled":
-        return DisabledBackend()
+        return None
     elif backend_type == "ollama":
         if not config.base_url:
             raise ValueError("TRACEA_RCA_BASE_URL required for ollama backend")
-        return OllamaBackend(
+        return OpenAIBackend(
             base_url=config.base_url,
             model=config.model or "llama3",
         )
@@ -161,6 +118,7 @@ def load_backend(config: RCABackendConfig) -> RCABackend:
         return OpenAIBackend(
             model=config.model or "gpt-4o",
             api_key=api_key,
+            base_url=config.base_url,
         )
     elif backend_type == "anthropic":
         api_key = config.api_key or os.getenv("ANTHROPIC_API_KEY", "")
