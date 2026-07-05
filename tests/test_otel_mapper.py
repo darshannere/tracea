@@ -410,3 +410,46 @@ async def test_spans_to_events_and_persist():
     assert [e['type'] for e in tool_events] == ['tool_call', 'tool_call', 'tool_result', 'tool_result']
     assert any(e['tool_name'] == 'Bash' for e in tool_events)
 
+
+@pytest.mark.asyncio
+async def test_persist_metrics_integration():
+    from tracea.server.otel.mapper import persist_metrics
+    from tracea.server.db import get_db
+
+    metrics = [
+        {
+            'name': 'gen_ai.client.token.usage',
+            'value': 523.0,
+            'attributes': {'gen_ai.token.type': 'input'},
+            'timestamp_unix_nano': 1700000000_000000000,
+            'resource_attrs': {'session_id': 's1', 'gen_ai.system': 'anthropic'},
+        },
+        {
+            'name': 'claude_code.cost.usage',
+            'value': 0.0157,
+            'attributes': {'gen_ai.response.model': 'claude-sonnet-5'},
+            'timestamp_unix_nano': 1700000000_000000000,
+            'resource_attrs': {'session_id': 's1'},
+        },
+    ]
+
+    await persist_metrics(metrics)
+
+    db = get_db()
+    cur = await db.execute('SELECT name, value, session_id, attributes FROM metrics ORDER BY name')
+    rows = [dict(r) for r in await cur.fetchall()]
+    assert len(rows) == 2
+    assert rows[0]['name'] == 'claude_code.cost.usage'
+    assert rows[0]['value'] == 0.0157
+    assert rows[0]['session_id'] == 's1'
+    attrs0 = json.loads(rows[0]['attributes'])
+    assert attrs0['attributes'] == {'gen_ai.response.model': 'claude-sonnet-5'}
+    assert attrs0['resource'] == {'session_id': 's1'}
+
+    assert rows[1]['name'] == 'gen_ai.client.token.usage'
+    assert rows[1]['value'] == 523.0
+    assert rows[1]['session_id'] == 's1'
+    attrs1 = json.loads(rows[1]['attributes'])
+    assert attrs1['attributes'] == {'gen_ai.token.type': 'input'}
+    assert attrs1['resource'] == {'session_id': 's1', 'gen_ai.system': 'anthropic'}
+

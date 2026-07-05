@@ -575,7 +575,14 @@ def _span_session_id_local(span: dict, resource_attrs: dict) -> str:
     return f"unknown-{uuid4()}"
 
 
-async def persist_metrics(metrics: list[dict], user_id: str) -> None:
-    """Implemented in Task 7."""
-    return None
+async def persist_metrics(metrics: list[dict], user_id: str = "") -> None:
+    """Persist OTel metric data points to the metrics table.
+
+    v1 stores raw data points only — no aggregation, no mapping to events.
+    The dashboard reads the metrics table directly in v2.
+    """
+    if not metrics:
+        return
+    from tracea.server.db import enqueue_metrics
+    await enqueue_metrics(metrics)
 

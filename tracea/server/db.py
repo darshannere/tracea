@@ -3,6 +3,7 @@ import sqlite3
 import aiosqlite
 import asyncio
 import json
+import uuid
 from pathlib import Path
 from typing import AsyncGenerator
 import fcntl
@@ -272,6 +273,62 @@ def _span_session_id(span: dict) -> str:
         if val:
             return str(val)
     return f"trace-{span.get('trace_id', '')}" if span.get("trace_id") else ""
+
+
+async def enqueue_metrics(metrics: list[dict]) -> int:
+    """Insert OTel metric data points. Idempotent via generated metric_id.
+
+    Each metric dict has the shape produced by parser.parse_metrics():
+        {name, value, attributes, timestamp_unix_nano, resource_attrs}
+    """
+    if not metrics:
+        return 0
+    if _db is None:
+        raise RuntimeError("Database not initialized")
+
+    rows = []
+    for m in metrics:
+        ts = _ns_to_iso(m.get("timestamp_unix_nano", 0))
+        session_id = _metric_session_id(m)
+        # metric_id: deterministic dedupe key. Combines name + timestamp +
+        # a hash of attributes so retransmits of the same data point replace.
+        attr_str = json.dumps(m.get("attributes", {}), sort_keys=True)
+        metric_id = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{m.get('name','')}|{ts}|{attr_str}"))
+        rows.append((
+            metric_id,
+            session_id,
+            m.get("name") or "",
+            m.get("value"),
+            json.dumps({
+                "attributes": m.get("attributes", {}) or {},
+                "resource": m.get("resource_attrs", {}) or {},
+            }),
+            ts,
+        ))
+
+    await _db.execute("BEGIN IMMEDIATE")
+    try:
+        await _db.executemany(
+            """INSERT OR REPLACE INTO metrics
+            (metric_id, session_id, name, value, attributes, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
+        await _db.commit()
+    except Exception:
+        await _db.rollback()
+        raise
+    return len(rows)
+
+
+def _metric_session_id(metric: dict) -> str:
+    """Extract session_id from metric resource_attrs."""
+    resource = metric.get("resource_attrs", {}) or {}
+    for key in ("session_id", "claude_code.session_id", "session.id", "process.id"):
+        val = resource.get(key)
+        if val:
+            return str(val)
+    return ""
 
 
 async def flush_events() -> int:
