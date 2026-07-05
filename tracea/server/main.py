@@ -64,7 +64,14 @@ app = FastAPI(title="tracea", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "db": "ok", "uptime_s": int(time.time() - start_time)}
+    db_ok = "ok"
+    try:
+        db_gen = get_db()
+        db = await db_gen.__anext__()
+        await db.execute("SELECT 1")
+    except Exception as e:
+        db_ok = f"error: {e}"
+    return {"status": "ok", "db": db_ok, "uptime_s": int(time.time() - start_time)}
 
 
 @app.get("/")
