@@ -89,6 +89,7 @@ from tracea.server.routes.config import router as config_router
 from tracea.server.routes.agents import router as agents_router
 from tracea.server.routes.live_views import router as live_views_router
 from tracea.server.routes.brain import router as brain_router
+from tracea.server.routes.otlp import router as otlp_router
 
 app.include_router(ingest_router)
 app.include_router(sessions_router)
@@ -97,3 +98,5 @@ app.include_router(config_router)
 app.include_router(agents_router)
 app.include_router(live_views_router)
 app.include_router(brain_router)
+app.include_router(otlp_router)
+
