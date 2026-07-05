@@ -237,6 +237,7 @@ async def flush_events() -> int:
             )
 
             # Upsert sessions derived from the events we just wrote.
+            # ponytail: O(session size) query, maintain incremental totals if ingest crawls
             # We re-aggregate from the full events table so partial batches
             # don't produce stale totals.
             session_ids = list({row[1] for row in batch})  # row[1] = session_id
