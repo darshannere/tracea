@@ -27,7 +27,7 @@ async def list_sessions(
     user_id: Optional[str] = None,
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
 
     where_parts: list[str] = []
     params: list = []
@@ -76,7 +76,7 @@ async def get_session_events(
     limit: int = Query(500, ge=1, le=5000),
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
     rows = await db.execute(
         """SELECT *,
                type           AS event_type,
@@ -90,7 +90,7 @@ async def get_session_events(
 
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, admin_user_id: str = Depends(require_admin)):
-    db = await anext(get_db())
+    db = get_db()
     await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (session_id,))
     await db.execute("DELETE FROM issues WHERE session_id = ?", (session_id,))
     await db.execute("DELETE FROM events WHERE session_id = ?", (session_id,))

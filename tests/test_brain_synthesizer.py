@@ -127,8 +127,7 @@ class TestProcessSession:
     async def test_noise_filter_skips_small_session(self, fresh_db):
         from tracea.server.db import get_db
 
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         # Insert a session with 2 events
         await db.execute(
@@ -149,7 +148,7 @@ class TestProcessSession:
 
         # Should be marked done without calling backend (noise filter)
         db_gen = get_db()
-        db2 = await db_gen.__anext__()
+        db2 = get_db()
         cursor = await db2.execute("SELECT brain_status FROM sessions WHERE session_id = ?", ("sess-small",))
         row = await cursor.fetchone()
         await db2.close()
@@ -160,8 +159,7 @@ class TestProcessSession:
     async def test_successful_synthesis(self, fresh_db):
         from tracea.server.db import get_db
 
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         # Insert a session with 10 events
         await db.execute(
@@ -182,7 +180,7 @@ class TestProcessSession:
 
         # Verify entry created
         db_gen = get_db()
-        db2 = await db_gen.__anext__()
+        db2 = get_db()
         cursor = await db2.execute("SELECT * FROM brain_entries WHERE user_id = ?", ("u1",))
         row = await cursor.fetchone()
         assert row is not None
@@ -200,8 +198,7 @@ class TestProcessSession:
     async def test_invalid_json_marks_failed(self, fresh_db):
         from tracea.server.db import get_db
 
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         await db.execute(
             "INSERT INTO sessions (session_id, brain_status, event_count) VALUES (?, ?, ?)",
@@ -220,7 +217,7 @@ class TestProcessSession:
         await _process_session(mock_backend, {"session_id": "sess-bad", "user_id": ""}, None)
 
         db_gen = get_db()
-        db2 = await db_gen.__anext__()
+        db2 = get_db()
         cursor = await db2.execute("SELECT brain_status FROM sessions WHERE session_id = ?", ("sess-bad",))
         row = await cursor.fetchone()
         await db2.close()
@@ -230,8 +227,7 @@ class TestProcessSession:
     async def test_wrong_schema_marks_failed(self, fresh_db):
         from tracea.server.db import get_db
 
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         await db.execute(
             "INSERT INTO sessions (session_id, brain_status, event_count) VALUES (?, ?, ?)",
@@ -250,7 +246,7 @@ class TestProcessSession:
         await _process_session(mock_backend, {"session_id": "sess-schema", "user_id": ""}, None)
 
         db_gen = get_db()
-        db2 = await db_gen.__anext__()
+        db2 = get_db()
         cursor = await db2.execute("SELECT brain_status FROM sessions WHERE session_id = ?", ("sess-schema",))
         row = await cursor.fetchone()
         await db2.close()
@@ -262,8 +258,7 @@ class TestUpsertEntry:
     async def test_insert_new(self, fresh_db):
         from tracea.server.db import get_db
 
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         extract = BrainEntryExtract(category="workflow", title="Test", content="Body", confidence=0.7)
         await _upsert_entry(db, "id1", "u1", extract, "sess-1")
@@ -279,8 +274,7 @@ class TestUpsertEntry:
     async def test_reinforce_existing(self, fresh_db):
         from tracea.server.db import get_db
 
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         extract = BrainEntryExtract(category="workflow", title="Test", content="Body", confidence=0.7)
         await _upsert_entry(db, "id1", "u1", extract, "sess-1")
@@ -321,8 +315,7 @@ class TestBatchWriterSetsPending:
         from tracea.server.db import enqueue_events
         await enqueue_events([event])
         await flush_events()
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
         cursor = await db.execute("SELECT brain_status FROM sessions WHERE session_id = ?", ("sess-pending",))
         row = await cursor.fetchone()
         assert row is not None

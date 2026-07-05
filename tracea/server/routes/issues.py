@@ -24,7 +24,7 @@ async def list_issues(
     user_id: Optional[str] = None,
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
     if cursor:
         data = _decode_cursor(cursor)
         detected_before, issue_before = data["detected_at"], data["issue_id"]

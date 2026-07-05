@@ -45,7 +45,7 @@ async def bearer_auth(
     token = credentials.credentials.strip()
     key_hash = hashlib.sha256(token.encode()).hexdigest()
 
-    db = await anext(get_db())
+    db = get_db()
     row = await db.execute(
         "SELECT user_id FROM api_keys WHERE key_hash = ?",
         (key_hash,)

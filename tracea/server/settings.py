@@ -6,8 +6,7 @@ from tracea.server.db import get_db
 
 async def get_setting(key: str, default: str | None = None) -> str | None:
     """Read a setting from the DB. Falls back to env var, then default."""
-    db_gen = get_db()
-    db = await db_gen.__anext__()
+    db = get_db()
     try:
         cursor = await db.execute("SELECT value FROM settings WHERE key = ?", (key,))
         row = await cursor.fetchone()
@@ -20,8 +19,7 @@ async def get_setting(key: str, default: str | None = None) -> str | None:
 
 async def set_setting(key: str, value: str) -> None:
     """Write or update a setting in the DB."""
-    db_gen = get_db()
-    db = await db_gen.__anext__()
+    db = get_db()
     await db.execute(
         """
         INSERT INTO settings (key, value, updated_at)

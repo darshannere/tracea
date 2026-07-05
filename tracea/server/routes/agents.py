@@ -18,7 +18,7 @@ class UserCreate(BaseModel):
 
 @router.get("/agents")
 async def list_agents(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
-    db = await anext(get_db())
+    db = get_db()
     where_clause = "WHERE agent_id IS NOT NULL AND agent_id != ''"
     params = []
     if user_id:
@@ -46,7 +46,7 @@ async def list_agents(user_id: Optional[str] = None, auth_user_id: str = Depends
 @router.get("/users")
 async def list_users(admin_user_id: str = Depends(require_admin)):
     """Return all team members from the users table."""
-    db = await anext(get_db())
+    db = get_db()
     rows = await db.execute("""
         SELECT user_id, name, email, created_at
         FROM users
@@ -59,7 +59,7 @@ async def list_users(admin_user_id: str = Depends(require_admin)):
 @router.post("/users")
 async def create_user(body: UserCreate, admin_user_id: str = Depends(require_admin)):
     """Add a new team member."""
-    db = await anext(get_db())
+    db = get_db()
     try:
         await db.execute(
             "INSERT INTO users (user_id, name, email) VALUES (?, ?, ?)",
@@ -74,7 +74,7 @@ async def create_user(body: UserCreate, admin_user_id: str = Depends(require_adm
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str, admin_user_id: str = Depends(require_admin)):
     """Remove a team member."""
-    db = await anext(get_db())
+    db = get_db()
     await db.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
     await db.commit()
     return {"status": "ok"}
@@ -87,7 +87,7 @@ async def delete_user(user_id: str, admin_user_id: str = Depends(require_admin))
 @router.get("/api-keys")
 async def list_api_keys(admin_user_id: str = Depends(require_admin)):
     """List all API keys (hashes redacted)."""
-    db = await anext(get_db())
+    db = get_db()
     rows = await db.execute("""
         SELECT key_hash, user_id, name, created_at, last_used
         FROM api_keys
@@ -108,7 +108,7 @@ async def list_api_keys(admin_user_id: str = Depends(require_admin)):
 @router.post("/api-keys")
 async def create_api_key(body: ApiKeyCreate, admin_user_id: str = Depends(require_admin)):
     """Create a new API key for a user. Returns the plaintext key once."""
-    db = await anext(get_db())
+    db = get_db()
     # Verify user exists
     row = await db.execute("SELECT 1 FROM users WHERE user_id = ?", (body.user_id,))
     if not await row.fetchone():
@@ -128,7 +128,7 @@ async def create_api_key(body: ApiKeyCreate, admin_user_id: str = Depends(requir
 @router.delete("/api-keys/{key_hash}")
 async def revoke_api_key(key_hash: str, admin_user_id: str = Depends(require_admin)):
     """Revoke an API key by its full hash."""
-    db = await anext(get_db())
+    db = get_db()
     await db.execute("DELETE FROM api_keys WHERE key_hash = ?", (key_hash,))
     await db.commit()
     return {"status": "ok"}

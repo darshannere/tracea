@@ -15,8 +15,7 @@ def client():
 async def seed_brain_entries(fresh_db):
     from tracea.server.db import get_db
 
-    db_gen = get_db()
-    db = await db_gen.__anext__()
+    db = get_db()
 
     entries = [
         {
@@ -70,8 +69,7 @@ class TestListBrainEntries:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             await db.execute(
                 "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 ("e1", "u1", "workflow", "T1", "C1", 0.8, '["s1"]', 1),
@@ -90,8 +88,7 @@ class TestListBrainEntries:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             for e in [("e1", "workflow", "W1"), ("e2", "error_fix", "E1")]:
                 await db.execute(
                     "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -111,8 +108,7 @@ class TestListBrainEntries:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             for e in [("e1", "alice", "A1"), ("e2", "bob", "B1")]:
                 await db.execute(
                     "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -132,8 +128,7 @@ class TestListBrainEntries:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             for e in [("e1", "SQLite WAL mode guide"), ("e2", "React hooks pattern")]:
                 await db.execute(
                     "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -153,8 +148,7 @@ class TestListBrainEntries:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             for i in range(5):
                 await db.execute(
                     "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -181,8 +175,7 @@ class TestGetBrainEntry:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             await db.execute(
                 "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 ("e1", "u1", "workflow", "T1", "C1", 0.8, '["s1"]', 1),
@@ -205,8 +198,7 @@ class TestDeleteBrainEntry:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             await db.execute(
                 "INSERT INTO brain_entries (id, user_id, category, title, content, confidence, source_sessions, hit_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 ("e1", "u1", "workflow", "T1", "C1", 0.8, '["s1"]', 1),
@@ -232,8 +224,7 @@ class TestBrainGraph:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             # e1 and e2 share sess-a; e3 is isolated
             entries = [
                 ("e1", "u1", "workflow", "T1", "C1", 0.8, '["sess-a", "sess-b"]'),
@@ -262,8 +253,7 @@ class TestBrainGraph:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             entries = [
                 ("e1", "alice", "workflow", "T1", "C1", 0.8, '["sess-a"]'),
                 ("e2", "bob", "workflow", "T2", "C2", 0.7, '["sess-a"]'),
@@ -287,8 +277,7 @@ class TestBrainGraph:
         from tracea.server.db import get_db
 
         async def _setup():
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             entries = [
                 ("e1", "u1", "workflow", "T1", "C1", 0.9, '["sess-a"]'),
                 ("e2", "u1", "workflow", "T2", "C2", 0.3, '["sess-a"]'),

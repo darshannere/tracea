@@ -45,7 +45,7 @@ class TestApiKeyMode:
         """Create a user and an API key in the test DB."""
         async def _setup():
             from tracea.server.db import get_db
-            db = await anext(get_db())
+            db = get_db()
             await db.execute(
                 "DELETE FROM users WHERE user_id = ?",
                 ("alice",),
@@ -179,7 +179,7 @@ class TestRouteProtection:
     def setup_user_and_key(self):
         async def _setup():
             from tracea.server.db import get_db
-            db = await anext(get_db())
+            db = get_db()
             await db.execute("DELETE FROM api_keys WHERE user_id IN (?, ?)", ("alice", "bob"))
             await db.execute("DELETE FROM users WHERE user_id IN (?, ?)", ("alice", "bob"))
             await db.execute(

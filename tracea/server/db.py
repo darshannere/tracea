@@ -47,11 +47,11 @@ def check_posix_locking(data_dir: str = "./data") -> bool:
 # --- Database connection ---
 
 
-async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
+def get_db() -> aiosqlite.Connection:
     global _db
     if _db is None:
         raise RuntimeError("Database not initialized. Call init_db() first.")
-    yield _db
+    return _db
 
 
 async def init_db() -> aiosqlite.Connection:

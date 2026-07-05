@@ -34,7 +34,7 @@ class TestUserIdValidation:
     def setup_user(self):
         async def _setup():
             from tracea.server.db import get_db
-            db = await anext(get_db())
+            db = get_db()
             await db.execute(
                 "DELETE FROM users WHERE user_id = ?",
                 ("darshan",),

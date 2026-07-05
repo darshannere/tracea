@@ -25,7 +25,7 @@ async def list_events(
     Returns merged tool_call + tool_result rows.  Unmatched tool_call rows
     appear as in-progress (duration_ms / exit_status are NULL).
     """
-    db = await anext(get_db())
+    db = get_db()
 
     session_filter = "AND tc.session_id = ?" if session_id else ""
     user_filter = "AND tc.user_id = ?" if user_id else ""
@@ -139,7 +139,7 @@ async def list_events(
 @router.get("/sessions")
 async def list_sessions_for_tree(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     """Return sessions with agent info for the left-hand tree panel."""
-    db = await anext(get_db())
+    db = get_db()
     where = "WHERE 1=1"
     params = []
     if user_id:
@@ -168,7 +168,7 @@ async def list_sessions_for_tree(user_id: Optional[str] = None, auth_user_id: st
 
 @router.get("/insights/cost-daily")
 async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
-    db = await anext(get_db())
+    db = get_db()
     where = "WHERE started_at >= date('now', '-6 days')"
     params = []
     if user_id:
@@ -188,7 +188,7 @@ async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(
 
 @router.get("/insights/cost-by-agent")
 async def cost_by_agent(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
-    db = await anext(get_db())
+    db = get_db()
     where = "WHERE agent_id IS NOT NULL AND agent_id != ''"
     params = []
     if user_id:
@@ -211,7 +211,7 @@ async def activity_by_session(
     session_id: str = Query(...),
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
     rows = await db.execute("""
         SELECT
             (CAST((julianday(timestamp) - 2440587.5) * 86400000 AS INTEGER) / 60000) * 60000 AS bucket_ms,
@@ -230,7 +230,7 @@ async def tokens_over_time(
     session_id: str = Query(...),
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
     rows = await db.execute("""
         SELECT
             (CAST((julianday(timestamp) - 2440587.5) * 86400000 AS INTEGER) / 60000) * 60000 AS bucket_ms,
@@ -250,7 +250,7 @@ async def error_rate(
     session_id: str = Query(default=""),
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
     # 5-minute buckets
     params = [session_id, session_id]
 
@@ -273,7 +273,7 @@ async def latency_by_tool(
     session_id: str = Query(default=""),
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    db = await anext(get_db())
+    db = get_db()
     params = [session_id, session_id]
 
     # SQLite 3.25+ supports window functions (NTILE).
@@ -324,7 +324,7 @@ async def latency_by_tool(
 async def stalled_agents(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     """Return sessions (treated as agents) that have not had an event in > 10 minutes
     and have not ended yet."""
-    db = await anext(get_db())
+    db = get_db()
     where = "WHERE ended_at IS NULL AND last_event_at IS NOT NULL AND CAST((julianday('now') - julianday(last_event_at)) * 86400000 AS INTEGER) > 600000"
     params = []
     if user_id:
@@ -346,7 +346,7 @@ async def stalled_agents(user_id: Optional[str] = None, auth_user_id: str = Depe
 
 @router.get("/health")
 async def health_snapshot():
-    db = await anext(get_db())
+    db = get_db()
 
     last_ts_row = await db.execute(
         "SELECT MAX(timestamp) AS ts FROM events"

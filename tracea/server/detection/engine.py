@@ -120,8 +120,7 @@ async def _evaluate_session_rule(sess: dict, session_id: str) -> bool:
     col = col_map.get(aggregation, f'SUM({count_field})')
 
     try:
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
         cursor = await db.execute(
             f"SELECT {col} as val FROM events WHERE session_id = ?",
             (session_id,),
@@ -205,8 +204,7 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
     session_event_count = 0
     try:
         from tracea.server.db import get_db
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
 
         cursor = await db.execute(
             "SELECT SUM(cost_usd) as total_cost, SUM(duration_ms) as total_duration, COUNT(*) as event_count FROM events WHERE session_id = ?",
@@ -239,8 +237,7 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
 
     try:
         from tracea.server.db import get_db
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
         await db.execute("""
             INSERT INTO issues (
                 issue_id, session_id, event_id, rule_name, issue_type, severity,

@@ -40,8 +40,7 @@ async def _record_failure(issue_id: str, webhook_url: str, error: str, attempt: 
     """Record permanent failure to webhook_failures dead-letter table."""
     from tracea.server.db import get_db
     from uuid import uuid4
-    db_gen = get_db()
-    db = await db_gen.__anext__()
+    db = get_db()
     await db.execute("""
         INSERT INTO webhook_failures (id, issue_id, destination_url, status_code, response_body, attempt_count, created_at)
         VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
@@ -74,8 +73,7 @@ async def _dispatch_loop() -> None:
 
         # Enrich issue with session start time (and RCA if already done)
         try:
-            db_gen = get_db()
-            db = await db_gen.__anext__()
+            db = get_db()
             cursor = await db.execute(
                 "SELECT started_at FROM sessions WHERE session_id = ?",
                 (session_id,)

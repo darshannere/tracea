@@ -26,7 +26,7 @@ async def retention_cleanup():
     while True:
         await asyncio.sleep(3600)
         try:
-            db = await anext(get_db())
+            db = get_db()
             old = await db.execute(f"SELECT session_id FROM sessions WHERE started_at < {cutoff}")
             for (sid,) in [row async for row in old]:
                 await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (sid,))
@@ -66,8 +66,7 @@ app = FastAPI(title="tracea", version="0.1.0", lifespan=lifespan)
 async def health():
     db_ok = "ok"
     try:
-        db_gen = get_db()
-        db = await db_gen.__anext__()
+        db = get_db()
         await db.execute("SELECT 1")
     except Exception as e:
         db_ok = f"error: {e}"

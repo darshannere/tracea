@@ -98,7 +98,7 @@ async def test_session_rule_count_field_whitelist_rejects_injection(fresh_db):
     from tracea.server.db import get_db
 
     # Seed a session with one event so the query has something to scan
-    db = await get_db().__anext__()
+    db = get_db()
     await db.execute(
         "INSERT INTO sessions (session_id) VALUES (?)", ("sess-1",),
     )

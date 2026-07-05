@@ -74,7 +74,7 @@ async def list_brain_entries(
     auth_user_id: str = Depends(get_auth_user_id),
 ):
     """List brain entries with cursor pagination and optional FTS5 search."""
-    db = await anext(get_db())
+    db = get_db()
 
     # FTS5 search: resolve matching rowids first
     fts_rowids: set[int] = set()
@@ -164,7 +164,7 @@ async def list_brain_entries(
 @router.get("/brain/entries/{entry_id}", response_model=BrainEntryOut)
 async def get_brain_entry(entry_id: str, auth_user_id: str = Depends(get_auth_user_id)):
     """Get a single brain entry by ID."""
-    db = await anext(get_db())
+    db = get_db()
     row = await db.execute("SELECT * FROM brain_entries WHERE id = ?", (entry_id,))
     entry = await row.fetchone()
     if not entry:
@@ -186,7 +186,7 @@ async def get_brain_entry(entry_id: str, auth_user_id: str = Depends(get_auth_us
 @router.delete("/brain/entries/{entry_id}")
 async def delete_brain_entry(entry_id: str, admin_user_id: str = Depends(require_admin)):
     """Delete a brain entry (and its FTS5 index via trigger)."""
-    db = await anext(get_db())
+    db = get_db()
     cursor = await db.execute("DELETE FROM brain_entries WHERE id = ?", (entry_id,))
     await db.commit()
     if cursor.rowcount == 0:
@@ -201,7 +201,7 @@ async def get_brain_graph(
     auth_user_id: str = Depends(get_auth_user_id),
 ):
     """Return graph topology: nodes = entries, edges = shared sessions."""
-    db = await anext(get_db())
+    db = get_db()
 
     where_parts: list[str] = []
     params: list = []

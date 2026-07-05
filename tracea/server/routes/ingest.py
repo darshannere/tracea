@@ -29,7 +29,7 @@ async def ingest_events(
     # Validate non-empty user_ids against users table
     unique_user_ids = {e.user_id for e in batch.events if e.user_id}
     if unique_user_ids:
-        db = await anext(get_db())
+        db = get_db()
         placeholders = ",".join("?" for _ in unique_user_ids)
         rows = await db.execute(
             f"SELECT user_id FROM users WHERE user_id IN ({placeholders})",
@@ -75,7 +75,7 @@ async def ingest_mcp_events(
     # Validate non-empty user_ids against users table
     unique_user_ids = {e.user_id for e in batch.events if e.user_id}
     if unique_user_ids:
-        db = await anext(get_db())
+        db = get_db()
         placeholders = ",".join("?" for _ in unique_user_ids)
         rows = await db.execute(
             f"SELECT user_id FROM users WHERE user_id IN ({placeholders})",
