@@ -460,9 +460,119 @@ def _error_event(log: Any, msg: str, user_id: str) -> TracedEvent:
 # Stubs (Tasks 6, 7)
 # ---------------------------------------------------------------------------
 
-async def spans_to_events_and_persist(spans: list[dict], user_id: str) -> None:
-    """Implemented in Task 6."""
-    return None
+async def spans_to_events_and_persist(spans: list[dict], user_id: str = "") -> None:
+    """Persist all spans, then emit tool events for tool-execution spans.
+
+    Called by the /v1/traces route. Persists every span to the spans table
+    (for tree visualization) and extracts tool_call/tool_result events from
+    gen_ai.execute_tool spans so they appear in the session event stream.
+    """
+    if not spans:
+        return
+
+    from tracea.server.db import enqueue_spans, enqueue_events, flush_events
+
+    # 1. Persist every span
+    await enqueue_spans(spans)
+
+    # 2. Extract tool events
+    tool_events: list[TracedEvent] = []
+    for span in spans:
+        events = _span_to_tool_events(span, user_id)
+        tool_events.extend(events)
+
+    if tool_events:
+        await enqueue_events(tool_events)
+        await flush_events()
+        import asyncio
+        from tracea.server.detection.engine import run_detection
+        asyncio.create_task(run_detection(tool_events))
+
+
+def _span_to_tool_events(span: dict, user_id: str) -> list[TracedEvent]:
+    """Emit tool_call (and tool_result if the span finished) for tool spans."""
+    attrs = span.get("span_attrs", {}) or {}
+    resource_attrs = span.get("resource_attrs", {}) or {}
+
+    is_tool = (
+        attrs.get("gen_ai.operation.name") == "execute_tool"
+        or "gen_ai.tool.call.id" in attrs
+        or (span.get("name") or "").startswith("tool")
+        or (span.get("name") or "").endswith(".tool.execution")
+    )
+    if not is_tool:
+        return []
+
+    tool_call_id = str(attrs.get("gen_ai.tool.call.id") or span.get("span_id") or uuid4())
+    tool_name = (
+        attrs.get("gen_ai.tool.name")
+        or attrs.get("tool_name")
+        or _tool_name_from_span_name(span.get("name") or "")
+        or "unknown"
+    )
+    session_id = _span_session_id_local(span, resource_attrs)
+    provider = _genai_provider(resource_attrs, attrs)
+    ts = _ns_to_datetime(span.get("start_time_unix_nano", 0))
+
+    common = dict(
+        session_id=session_id,
+        agent_id=str(resource_attrs.get("agent_id") or provider),
+        user_id=user_id,
+        timestamp=ts,
+        provider=provider,
+        tool_call_id=tool_call_id,
+        tool_name=tool_name,
+        metadata={
+            "integration": "otlp",
+            "source": "span",
+            "trace_id": span.get("trace_id"),
+            "span_id": span.get("span_id"),
+            "parent_span_id": span.get("parent_span_id"),
+        },
+    )
+
+    events: list[TracedEvent] = [TracedEvent(
+        event_id=str(uuid4()),
+        type="tool_call",
+        **common,
+    )]
+
+    # If the span has an end_time, it finished → emit tool_result
+    if span.get("end_time_unix_nano"):
+        end_ts = _ns_to_datetime(span["end_time_unix_nano"])
+        duration_ms = int((span["end_time_unix_nano"] - span.get("start_time_unix_nano", 0)) / 1e6)
+        events.append(TracedEvent(
+            event_id=str(uuid4()),
+            type="tool_result",
+            timestamp=end_ts,
+            duration_ms=max(duration_ms, 0),
+            error=attrs.get("error.message") or attrs.get("exception.message"),
+            **{k: v for k, v in common.items() if k != "timestamp"},
+        ))
+
+    return events
+
+
+def _tool_name_from_span_name(name: str) -> str:
+    """Extract tool name from a span like 'tool Bash' or 'claude_code.tool.execution'."""
+    if not name:
+        return ""
+    parts = name.split()
+    if len(parts) >= 2:
+        return parts[1]
+    if "." in name:
+        return name.split(".")[-2] if name.count(".") >= 2 else ""
+    return name
+
+
+def _span_session_id_local(span: dict, resource_attrs: dict) -> str:
+    for key in ("session_id", "claude_code.session_id", "session.id", "process.id"):
+        val = resource_attrs.get(key)
+        if val:
+            return str(val)
+    if span.get("trace_id"):
+        return f"trace-{span['trace_id']}"
+    return f"unknown-{uuid4()}"
 
 
 async def persist_metrics(metrics: list[dict], user_id: str) -> None:

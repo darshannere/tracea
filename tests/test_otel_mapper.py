@@ -346,3 +346,67 @@ def test_genai_provider_mapping():
     assert _genai_provider({}, {"gen_ai.system": "ollama"}) == "ollama"
     assert _genai_provider({}, {"gen_ai.system": "unknown-sys"}) == "unknown"
 
+
+@pytest.mark.asyncio
+async def test_spans_to_events_and_persist():
+    from tracea.server.otel.mapper import spans_to_events_and_persist
+    from tracea.server.db import get_db
+
+    spans = [
+        {
+            'trace_id': 't1',
+            'span_id': 'a',
+            'parent_span_id': '',
+            'name': 'claude_code.interaction',
+            'kind': 1,
+            'start_time_unix_nano': 1700000000_000000000,
+            'end_time_unix_nano': 1700000001_000000000,
+            'resource_attrs': {'session_id': 's1', 'gen_ai.system': 'anthropic'},
+            'scope_name': 'claude-code',
+            'span_attrs': {'gen_ai.operation.name': 'chat', 'gen_ai.request.model': 'claude-sonnet-5'}
+        },
+        {
+            'trace_id': 't1',
+            'span_id': 'b',
+            'parent_span_id': 'a',
+            'name': 'claude_code.tool Bash',
+            'kind': 3,
+            'start_time_unix_nano': 1700000000_500000000,
+            'end_time_unix_nano': 1700000000_900000000,
+            'resource_attrs': {'session_id': 's1'},
+            'scope_name': 'claude-code',
+            'span_attrs': {'gen_ai.operation.name': 'execute_tool', 'gen_ai.tool.call.id': 'tc-1', 'gen_ai.tool.name': 'Bash'}
+        },
+        {
+            'trace_id': 't1',
+            'span_id': 'c',
+            'parent_span_id': 'b',
+            'name': 'claude_code.tool.execution',
+            'kind': 1,
+            'start_time_unix_nano': 1700000000_600000000,
+            'end_time_unix_nano': 1700000000_800000000,
+            'resource_attrs': {'session_id': 's1'},
+            'scope_name': 'claude-code',
+            'span_attrs': {'gen_ai.operation.name': 'execute_tool'}
+        },
+    ]
+
+    await spans_to_events_and_persist(spans, user_id='u1')
+
+    db = get_db()
+    cur = await db.execute('SELECT trace_id, span_id, parent_span_id, name, attributes FROM spans ORDER BY start_time')
+    rows = [dict(r) for r in await cur.fetchall()]
+    assert len(rows) == 3
+    assert rows[0]['span_id'] == 'a'
+    assert rows[1]['parent_span_id'] == 'a'
+    assert rows[1]['name'] == 'claude_code.tool Bash'
+    assert json.loads(rows[1]['attributes'])['span']['gen_ai.tool.name'] == 'Bash'
+
+    cur2 = await db.execute("SELECT type, tool_name, duration_ms, error FROM events WHERE type LIKE 'tool%' ORDER BY timestamp, type")
+    tool_events = [dict(r) for r in await cur2.fetchall()]
+    # 2 tool spans. Each has start and end, so 2 events per span = 4 events.
+    assert len(tool_events) == 4
+    # Check that tool_call and tool_result were emitted
+    assert [e['type'] for e in tool_events] == ['tool_call', 'tool_call', 'tool_result', 'tool_result']
+    assert any(e['tool_name'] == 'Bash' for e in tool_events)
+

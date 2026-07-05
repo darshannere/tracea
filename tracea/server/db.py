@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import AsyncGenerator
 import fcntl
+from datetime import datetime, timezone
 from tracea.server.models import TracedEvent
 
 DB_PATH = os.getenv("TRACEA_DB_PATH", "./data/tracea.db")
@@ -203,6 +204,74 @@ async def enqueue_events(events: list[TracedEvent]) -> None:
     # Start flush timer if not running
     if _flush_timer is None:
         _start_flush_timer()
+
+
+async def enqueue_spans(spans: list[dict]) -> int:
+    """Insert OTel spans into the spans table. Idempotent via PK (trace_id, span_id).
+
+    Each span dict has the shape produced by parser.parse_traces():
+        {trace_id, span_id, parent_span_id, name, kind,
+         start_time_unix_nano, end_time_unix_nano,
+         resource_attrs, scope_name, span_attrs}
+    """
+    if not spans:
+        return 0
+    if _db is None:
+        raise RuntimeError("Database not initialized")
+
+    rows = []
+    for s in spans:
+        start = _ns_to_iso(s.get("start_time_unix_nano", 0))
+        end = _ns_to_iso(s.get("end_time_unix_nano")) if s.get("end_time_unix_nano") else None
+        attrs_json = json.dumps({
+            "resource": s.get("resource_attrs", {}) or {},
+            "span": s.get("span_attrs", {}) or {},
+            "scope": s.get("scope_name", ""),
+        })
+        session_id = _span_session_id(s)
+        rows.append((
+            s.get("trace_id") or "",
+            s.get("span_id") or "",
+            s.get("parent_span_id") or "",
+            session_id,
+            s.get("name") or "",
+            str(s.get("kind", "")),
+            start,
+            end,
+            attrs_json,
+        ))
+
+    await _db.execute("BEGIN IMMEDIATE")
+    try:
+        await _db.executemany(
+            """INSERT OR REPLACE INTO spans
+            (trace_id, span_id, parent_span_id, session_id, name, kind,
+             start_time, end_time, attributes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
+        await _db.commit()
+    except Exception:
+        await _db.rollback()
+        raise
+    return len(rows)
+
+
+def _ns_to_iso(ns: int) -> str:
+    """Nanoseconds since epoch → ISO 8601 UTC string."""
+    if not ns:
+        return datetime.now(timezone.utc).isoformat()
+    return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc).isoformat()
+
+
+def _span_session_id(span: dict) -> str:
+    """Extract session_id from span resource_attrs (Claude Code sets it)."""
+    resource = span.get("resource_attrs", {}) or {}
+    for key in ("session_id", "claude_code.session_id", "session.id", "process.id"):
+        val = resource.get(key)
+        if val:
+            return str(val)
+    return f"trace-{span.get('trace_id', '')}" if span.get("trace_id") else ""
 
 
 async def flush_events() -> int:
