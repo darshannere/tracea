@@ -9,8 +9,8 @@ import time
 import uuid
 from pathlib import Path
 
-from tracea_mcp.transport.stdio import StdioTransport
-from tracea_mcp.tools.registry import ToolRegistry
+from tracea_mcp.transport import StdioTransport
+from tracea_mcp.tools import ToolRegistry
 from tracea_mcp.session import create_session, next_sequence_for
 from tracea_mcp.client import get_client
 

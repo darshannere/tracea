@@ -141,7 +141,8 @@ class _CaptureServer:
                         pass
 
                 # Always return 200
-                writer.write(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 21\r\n\r\n{\"accepted\":1}")
+                res_body = b'{"accepted":1}'
+                writer.write(f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len(res_body)}\r\n\r\n".encode() + res_body)
                 await writer.drain()
             except Exception:
                 pass
@@ -211,24 +212,29 @@ def mcp_server(mock_tracea_server):
     proc._event_capture = capture
     yield proc
 
-    # Drain stderr before terminating
-    stderr_chunks = []
-    while True:
-        ready, _, _ = select.select([proc.stderr], [], [], 0.5)
-        if ready:
-            chunk = proc.stderr.read(4096)
-            if chunk:
-                stderr_chunks.append(chunk.decode("utf-8", errors="replace"))
-            else:
-                break
-        else:
-            break
-
+    # Terminate process first, then read stderr
     try:
+        proc.terminate()
         proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
+
+    # Now drain stderr safely since the process is dead
+    stderr_chunks = []
+    try:
+        import fcntl
+        fd = proc.stderr.fileno()
+        fl = fcntl.fcntl(fd, fcntl.F_GETFL)
+        fcntl.fcntl(fd, fcntl.F_SETFL, fl | os.O_NONBLOCK)
+        while True:
+            chunk = proc.stderr.read(4096)
+            if not chunk:
+                break
+            stderr_chunks.append(chunk.decode("utf-8", errors="replace"))
+    except Exception:
+        pass
+
 
 
 def test_full_mcp_handshake(mcp_server):
@@ -251,15 +257,19 @@ def test_full_mcp_handshake(mcp_server):
     # 3. List tools
     tools_resp = client.send("tools/list")
     tool_names = [t["name"] for t in tools_resp["result"]["tools"]]
-    assert set(tool_names) == {"Bash", "Read", "Write", "Edit", "Glob", "Grep", "brain"}
+    assert set(tool_names) == {"brain", "log_to_tracea"}
 
-    # 4. Execute Read tool (use /etc/hosts which exists on all Unix systems)
-    read_resp = client.send("tools/call", {
-        "name": "Read",
-        "arguments": {"file_path": "/etc/hosts"},
+    # 4. Execute log_to_tracea tool
+    log_resp = client.send("tools/call", {
+        "name": "log_to_tracea",
+        "arguments": {
+            "event_type": "custom_agent_event",
+            "content": "Hello from agent",
+            "metadata": {"foo": "bar"}
+        },
     })
-    content_text = read_resp["result"]["content"][0]["text"]
-    assert content_text.strip(), "Read tool should return non-empty content for /etc/hosts"
+    content_text = log_resp["result"]["content"][0]["text"]
+    assert "Successfully logged event" in content_text
 
     # 5. Shutdown
     shutdown_resp = client.send("shutdown", {})
@@ -281,8 +291,12 @@ def test_events_emitted_to_tracea(mcp_server):
     client.send("notifications/initialized", {})
 
     client.send("tools/call", {
-        "name": "Read",
-        "arguments": {"file_path": "/etc/hosts"},
+        "name": "log_to_tracea",
+        "arguments": {
+            "event_type": "custom_agent_event",
+            "content": "Hello from agent",
+            "metadata": {"foo": "bar"}
+        },
     })
 
     client.send("shutdown", {})
@@ -291,7 +305,7 @@ def test_events_emitted_to_tracea(mcp_server):
     captured = mcp_server._event_capture.events
     event_types = [e["type"] for e in captured]
 
-    for expected in ("session_start", "tool_call", "tool_result", "session_end"):
+    for expected in ("session_start", "tool_call", "custom_agent_event", "tool_result", "session_end"):
         assert expected in event_types, f"Missing {expected} event. Got: {event_types}"
 
     session_start = next(e for e in captured if e["type"] == "session_start")
@@ -302,16 +316,21 @@ def test_events_emitted_to_tracea(mcp_server):
     assert session_start["metadata"]["integration"] == "tracea-mcp"
 
     tool_call = next(e for e in captured if e["type"] == "tool_call")
-    assert tool_call["tool_name"] == "Read"
+    assert tool_call["tool_name"] == "log_to_tracea"
     assert tool_call["provider"] in ("claude-code", "openclaw")
     assert tool_call["session_id"] == session_start["session_id"]
     assert tool_call["sequence"] > 0
     assert tool_call["timestamp"].endswith("Z")
     args = json.loads(tool_call["content"])
-    assert args["file_path"] == "/etc/hosts"
+    assert args["event_type"] == "custom_agent_event"
+
+    custom_event = next(e for e in captured if e["type"] == "custom_agent_event")
+    assert custom_event["session_id"] == session_start["session_id"]
+    assert custom_event["content"] == "Hello from agent"
+    assert custom_event["metadata"]["foo"] == "bar"
 
     tool_result = next(e for e in captured if e["type"] == "tool_result")
-    assert tool_result["tool_name"] == "Read"
+    assert tool_result["tool_name"] == "log_to_tracea"
     assert tool_result["status_code"] == 0, f"Expected exit 0, got: {tool_result['status_code']}"
     assert tool_result["content"] is not None
     assert tool_result["duration_ms"] >= 0
