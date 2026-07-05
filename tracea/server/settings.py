@@ -6,6 +6,9 @@ from tracea.server.db import get_db
 
 async def get_setting(key: str, default: str | None = None) -> str | None:
     """Read a setting from the DB. Falls back to env var, then default."""
+    if key.endswith("API_KEY") or "API_KEY" in key:
+        return os.getenv(key, default)
+
     db = get_db()
     try:
         cursor = await db.execute("SELECT value FROM settings WHERE key = ?", (key,))
@@ -19,6 +22,10 @@ async def get_setting(key: str, default: str | None = None) -> str | None:
 
 async def set_setting(key: str, value: str) -> None:
     """Write or update a setting in the DB."""
+    if key.endswith("API_KEY") or "API_KEY" in key:
+        print(f"[tracea] Security warning: attempt to write {key} to DB ignored. Use environment variables instead.")
+        return
+
     db = get_db()
     await db.execute(
         """
@@ -37,17 +44,19 @@ async def get_settings(keys: list[str]) -> dict[str, str | None]:
     """Read a batch of settings from the DB. Falls back to env vars, then None."""
     db = get_db()
     results = {key: os.getenv(key) for key in keys}
-    try:
-        placeholders = ",".join("?" for _ in keys)
-        cursor = await db.execute(
-            f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
-            tuple(keys)
-        )
-        rows = await cursor.fetchall()
-        for row in rows:
-            results[row["key"]] = row["value"]
-    except Exception:
-        pass
+    db_keys = [k for k in keys if not (k.endswith("API_KEY") or "API_KEY" in k)]
+    if db_keys:
+        try:
+            placeholders = ",".join("?" for _ in db_keys)
+            cursor = await db.execute(
+                f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
+                tuple(db_keys)
+            )
+            rows = await cursor.fetchall()
+            for row in rows:
+                results[row["key"]] = row["value"]
+        except Exception:
+            pass
     return results
 
 
