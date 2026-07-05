@@ -33,6 +33,24 @@ async def set_setting(key: str, value: str) -> None:
     await db.commit()
 
 
+async def get_settings(keys: list[str]) -> dict[str, str | None]:
+    """Read a batch of settings from the DB. Falls back to env vars, then None."""
+    db = get_db()
+    results = {key: os.getenv(key) for key in keys}
+    try:
+        placeholders = ",".join("?" for _ in keys)
+        cursor = await db.execute(
+            f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
+            tuple(keys)
+        )
+        rows = await cursor.fetchall()
+        for row in rows:
+            results[row["key"]] = row["value"]
+    except Exception:
+        pass
+    return results
+
+
 async def get_rca_config() -> dict:
     """Load RCA config from DB settings, falling back to env vars."""
     keys = [
@@ -45,9 +63,7 @@ async def get_rca_config() -> dict:
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
     ]
-    values = {}
-    for key in keys:
-        values[key] = await get_setting(key)
+    values = await get_settings(keys)
 
     backend = values.get("TRACEA_RCA_BACKEND") or "disabled"
     return {
@@ -81,9 +97,7 @@ async def get_brain_config() -> dict:
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
     ]
-    values = {}
-    for key in keys:
-        values[key] = await get_setting(key)
+    values = await get_settings(keys)
 
     # Brain defaults to RCA settings if not explicitly configured
     backend = values.get("TRACEA_BRAIN_BACKEND") or values.get("TRACEA_RCA_BACKEND") or "disabled"
