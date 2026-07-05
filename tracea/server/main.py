@@ -21,18 +21,15 @@ _rca_worker_task: asyncio.Task | None = None
 
 async def retention_cleanup():
     """Delete sessions older than TRACEA_RETENTION_DAYS every hour."""
-    retention_days = int(os.getenv("TRACEA_RETENTION_DAYS", "30"))
-    cutoff = f"datetime('now', '-{retention_days} days')"
     while True:
         await asyncio.sleep(3600)
         try:
+            retention_days = int(os.getenv("TRACEA_RETENTION_DAYS", "30"))
             db = get_db()
-            old = await db.execute(f"SELECT session_id FROM sessions WHERE started_at < {cutoff}")
-            for (sid,) in [row async for row in old]:
-                await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (sid,))
-                await db.execute("DELETE FROM issues WHERE session_id = ?", (sid,))
-                await db.execute("DELETE FROM events WHERE session_id = ?", (sid,))
-                await db.execute("DELETE FROM sessions WHERE session_id = ?", (sid,))
+            await db.execute(
+                "DELETE FROM sessions WHERE datetime(started_at) < datetime('now', ?)",
+                (f"-{retention_days} days",)
+            )
             await db.commit()
         except Exception as e:
             print(f"[tracea] Retention failed: {e}")
