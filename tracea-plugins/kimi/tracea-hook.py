@@ -1,29 +1,7 @@
 #!/usr/bin/env python3
+# This file is generated from tracea-plugins/shared/tracea-hook.py.template
+# Do not edit directly.
 """tracea-hook.py — Kimi CLI lifecycle hook for tracea observability.
-
-Install: Add to ~/.kimi/config.toml:
-
-    [[hooks]]
-    event = "PreToolUse"
-    command = "python3 /path/to/tracea-hook.py pre"
-
-    [[hooks]]
-    event = "PostToolUse"
-    command = "python3 /path/to/tracea-hook.py post"
-
-    [[hooks]]
-    event = "PostToolUseFailure"
-    command = "python3 /path/to/tracea-hook.py post_failure"
-
-    [[hooks]]
-    event = "SessionStart"
-    command = "python3 /path/to/tracea-hook.py session_start"
-
-    [[hooks]]
-    event = "SessionEnd"
-    command = "python3 /path/to/tracea-hook.py session_end"
-
-Kimi CLI sends JSON context via stdin for every hook invocation.
 """
 from __future__ import annotations
 
@@ -59,11 +37,43 @@ USER_ID = (
     or _DISCOVERED.get("user_id", "")
 )
 
-# In-memory store to correlate pre/post tool calls within a process.
-# Kimi runs PreToolUse and PostToolUse as separate subprocess calls,
-# so we use a temp file keyed by session_id + tool_name.
 _LAST_TCID_FILE = "/tmp/tracea-kimi-last-tcid"
 _START_TIME_FILE = "/tmp/tracea-kimi-start-time"
+
+
+def _persist_tcid(tcid: str, start_time: float | None = None) -> None:
+    try:
+        with open(_LAST_TCID_FILE, "w") as f:
+            f.write(tcid)
+        if start_time is not None:
+            with open(_START_TIME_FILE, "w") as f:
+                f.write(str(start_time))
+    except Exception:
+        pass
+
+
+def _read_tcid() -> str | None:
+    try:
+        with open(_LAST_TCID_FILE) as f:
+            return f.read().strip()
+    except Exception:
+        return None
+
+
+def _read_start_time() -> float | None:
+    try:
+        with open(_START_TIME_FILE) as f:
+            return float(f.read().strip())
+    except Exception:
+        return None
+
+
+def _clear_tcid() -> None:
+    for f in (_LAST_TCID_FILE, _START_TIME_FILE):
+        try:
+            os.remove(f)
+        except Exception:
+            pass
 
 
 def post_event(
@@ -75,7 +85,7 @@ def post_event(
     tool_call_id: str | None = None,
     session_id: str | None = None,
 ) -> int:
-    """POST a single event to the tracea server. Returns HTTP status or 0 on failure."""
+    """POST a single event to the tracea server."""
     sid = session_id or f"{AGENT_ID}-{os.getpid()}"
     tid = tool_call_id or str(uuid.uuid4())
 
@@ -121,45 +131,9 @@ def post_event(
         return 0
 
 
-def _persist_tcid(tcid: str, start_time: float | None = None) -> None:
-    try:
-        with open(_LAST_TCID_FILE, "w") as f:
-            f.write(tcid)
-        if start_time is not None:
-            with open(_START_TIME_FILE, "w") as f:
-                f.write(str(start_time))
-    except Exception:
-        pass
-
-
-def _read_tcid() -> str | None:
-    try:
-        with open(_LAST_TCID_FILE) as f:
-            return f.read().strip()
-    except Exception:
-        return None
-
-
-def _read_start_time() -> float | None:
-    try:
-        with open(_START_TIME_FILE) as f:
-            return float(f.read().strip())
-    except Exception:
-        return None
-
-
-def _clear_tcid() -> None:
-    for f in (_LAST_TCID_FILE, _START_TIME_FILE):
-        try:
-            os.remove(f)
-        except Exception:
-            pass
-
-
 def main() -> int:
     hook_type = sys.argv[1] if len(sys.argv) > 1 else ""
 
-    # Read Kimi JSON context from stdin
     stdin_data = ""
     if not sys.stdin.isatty():
         try:
@@ -174,20 +148,20 @@ def main() -> int:
         except json.JSONDecodeError:
             pass
 
-    session_id = ctx.get("session_id")
-    tool_name = ctx.get("tool_name")
-    tool_input = ctx.get("tool_input")
-    tool_output = ctx.get("tool_output")
+    session_id = ctx.get("session_id") or os.environ.get("GEMINI_SESSION_ID")
+    tool_name = ctx.get("tool_name") or ctx.get("name")
+    tool_input = ctx.get("tool_input") or ctx.get("args")
+    tool_output = ctx.get("tool_output") or ctx.get("result")
     tool_error = ctx.get("error")
     tcid = ctx.get("tool_call_id") or str(uuid.uuid4())
 
-    if hook_type == "pre":
+    if hook_type in ("before_tool", "pre"):
         content = json.dumps(tool_input) if tool_input else None
         _persist_tcid(tcid, start_time=datetime.now(timezone.utc).timestamp())
         post_event("tool_call", content=content, tool_name=tool_name,
                    tool_call_id=tcid, session_id=session_id)
 
-    elif hook_type == "post":
+    elif hook_type in ("after_tool", "post"):
         content = json.dumps(tool_output) if tool_output else None
         stored_tcid = _read_tcid() or tcid
         start_time = _read_start_time()

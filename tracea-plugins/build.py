@@ -1,103 +1,34 @@
-// This file is generated from tracea-plugins/shared/tracea-plugin.ts.template
-// Do not edit directly.
-import * as fs from "fs";
-import * as path from "path";
+import os
 
-interface TraceaConfig {
-  serverUrl: string;
-  agentId: string;
-  userId: string;
-}
+def build():
+    # Change CWD to tracea-plugins directory if needed
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(base_dir)
 
-function loadConfig(): Partial<TraceaConfig> {
-  try {
-    const configPath = path.join(
-      process.env.HOME || process.env.USERPROFILE || ".",
-      ".tracea",
-      "config.json"
-    );
-    const raw = fs.readFileSync(configPath, "utf-8");
-    const parsed = JSON.parse(raw);
-    return {
-      serverUrl: parsed.server_url,
-      agentId: parsed.agent_id,
-      userId: parsed.user_id,
-    };
-  } catch {
-    return {};
-  }
-}
+    # 1. Build Python hooks
+    with open("shared/tracea-hook.py.template") as f:
+        py_template = f.read()
 
-const DISCOVERED = loadConfig();
+    # Gemini hook
+    gemini_hook = py_template.replace("{{agent_title}}", "Gemini").replace("{{default_agent_id}}", "gemini-cli").replace("{{agent_slug}}", "gemini").replace("{{provider}}", "gemini-cli")
+    os.makedirs("gemini", exist_ok=True)
+    with open("gemini/tracea-hook.py", "w") as f:
+        f.write(gemini_hook)
+    os.chmod("gemini/tracea-hook.py", 0o755)
 
-const CONFIG: TraceaConfig = {
-  serverUrl: process.env.TRACEA_SERVER_URL || DISCOVERED.serverUrl || "http://localhost:8080",
-  agentId: process.env.TRACEA_AGENT_ID || DISCOVERED.agentId || "openclaw",
-  userId: process.env.TRACEA_USER_ID || DISCOVERED.userId || "",
-};
+    # Kimi hook
+    kimi_hook = py_template.replace("{{agent_title}}", "Kimi").replace("{{default_agent_id}}", "kimi").replace("{{agent_slug}}", "kimi").replace("{{provider}}", "kimi")
+    os.makedirs("kimi", exist_ok=True)
+    with open("kimi/tracea-hook.py", "w") as f:
+        f.write(kimi_hook)
+    os.chmod("kimi/tracea-hook.py", 0o755)
 
-function genId(): string {
-  // Use crypto when available, fallback to Math.random
-  if (typeof crypto !== "undefined" && crypto.randomUUID) {
-    return crypto.randomUUID();
-  }
-  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-}
+    # 2. Build TS plugins
+    with open("shared/tracea-plugin.ts.template") as f:
+        ts_template = f.read()
 
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-async function postEvent(payload: {
-  events: Array<Record<string, unknown>>;
-}): Promise<void> {
-  try {
-    const resp = await fetch(`${CONFIG.serverUrl}/api/v1/events/mcp`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
-    if (!resp.ok) {
-      console.error(`[tracea] ERROR: server returned HTTP ${resp.status}`);
-    }
-  } catch (err) {
-    console.error(`[tracea] ERROR: ${err}`);
-  }
-}
-
-function buildEvent(
-  type: string,
-  sessionKey: string,
-  agentId: string,
-  overrides: Record<string, unknown> = {}
-): Record<string, unknown> {
-  return {
-    event_id: genId(),
-    session_id: sessionKey,
-    agent_id: agentId || CONFIG.agentId,
-    user_id: CONFIG.userId,
-    sequence: 0,
-    timestamp: nowIso(),
-    type,
-    provider: "openclaw",
-    model: overrides.model || "",
-    role: null,
-    content: null,
-    tool_call_id: null,
-    tool_name: null,
-    duration_ms: 0,
-    error: null,
-    metadata: {
-      integration: "openclaw",
-      ...overrides.metadata,
-    },
-    ...overrides,
-  };
-}
-
-
+    # Openclaw hook implementation
+    openclaw_impl = """
 interface TurnState {
   turnId: string;
   agentId: string;
@@ -405,4 +336,100 @@ export default function register(api: any): void {
 
   console.log("[tracea] OpenClaw plugin registered — 15 hooks active");
 }
+"""
 
+    openclaw_plugin = ts_template.replace("{{default_agent_id}}", "openclaw").replace("{{provider}}", "openclaw").replace("{{hook_implementation}}", openclaw_impl)
+    os.makedirs("openclaw", exist_ok=True)
+    with open("openclaw/tracea-plugin.ts", "w") as f:
+        f.write(openclaw_plugin)
+
+    # Opencode hook implementation
+    opencode_impl = """import type { Plugin, HookContext } from "opencode";
+
+let sessionId = newSessionId();
+
+function newSessionId(): string {
+  return `${CONFIG.agentId}-${Date.now()}-${genId()}`;
+}
+
+async function postOpencodeEvent(
+  eventType: string,
+  content?: string,
+  error?: string,
+  durationMs = 0,
+  toolName?: string,
+  toolCallId?: string
+): Promise<void> {
+  await postEvent({
+    events: [
+      {
+        ...buildEvent(eventType, sessionId, CONFIG.agentId, {
+          content: content ?? null,
+          tool_call_id: toolCallId ?? null,
+          tool_name: toolName ?? null,
+          duration_ms: durationMs,
+          error: error ?? null,
+          metadata: {
+            integration: "opencode",
+            hook_type: eventType,
+            opencode_tool_name: toolName,
+          },
+        }),
+      },
+    ],
+  });
+}
+
+const traceaPlugin: Plugin = {
+  name: "tracea",
+  version: "0.1.0",
+
+  async onLoad() {},
+
+  hooks: {
+    "session.start": async () => {
+      sessionId = newSessionId();
+      await postOpencodeEvent("session_start");
+    },
+
+    "tool.execute.before": async (ctx: HookContext) => {
+      const toolName = ctx.tool?.name || "unknown";
+      const toolCallId = ctx.toolCallId || genId();
+      const args = ctx.args ? JSON.stringify(ctx.args) : undefined;
+
+      ctx.state.traceaToolCallId = toolCallId;
+      ctx.state.traceaToolStart = Date.now();
+
+      await postOpencodeEvent("tool_call", args, undefined, 0, toolName, toolCallId);
+    },
+
+    "tool.execute.after": async (ctx: HookContext) => {
+      const toolName = ctx.tool?.name || "unknown";
+      const toolCallId = ctx.state.traceaToolCallId || genId();
+      const durationMs = ctx.state.traceaToolStart
+        ? Date.now() - ctx.state.traceaToolStart
+        : 0;
+      const result = ctx.result ? JSON.stringify(ctx.result) : undefined;
+      const error = ctx.error?.message;
+
+      await postOpencodeEvent("tool_result", result, error, durationMs, toolName, toolCallId);
+    },
+
+    "session.end": async () => {
+      await postOpencodeEvent("session_end");
+    },
+  },
+};
+
+export default traceaPlugin;
+"""
+
+    opencode_plugin = ts_template.replace("{{default_agent_id}}", "opencode").replace("{{provider}}", "opencode").replace("{{hook_implementation}}", opencode_impl)
+    os.makedirs("opencode", exist_ok=True)
+    with open("opencode/tracea-plugin.ts", "w") as f:
+        f.write(opencode_plugin)
+
+    print("Successfully built all 4 plugins from shared templates!")
+
+if __name__ == "__main__":
+    build()

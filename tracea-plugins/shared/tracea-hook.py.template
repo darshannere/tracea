@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # This file is generated from tracea-plugins/shared/tracea-hook.py.template
 # Do not edit directly.
-"""tracea-hook.py — Gemini CLI lifecycle hook for tracea observability.
+"""tracea-hook.py — {{agent_title}} CLI lifecycle hook for tracea observability.
 """
 from __future__ import annotations
 
@@ -30,15 +30,15 @@ SERVER_URL = (
 )
 AGENT_ID = (
     os.environ.get("TRACEA_AGENT_ID")
-    or _DISCOVERED.get("agent_id", "gemini-cli")
+    or _DISCOVERED.get("agent_id", "{{default_agent_id}}")
 )
 USER_ID = (
     os.environ.get("TRACEA_USER_ID")
     or _DISCOVERED.get("user_id", "")
 )
 
-_LAST_TCID_FILE = "/tmp/tracea-gemini-last-tcid"
-_START_TIME_FILE = "/tmp/tracea-gemini-start-time"
+_LAST_TCID_FILE = "/tmp/tracea-{{agent_slug}}-last-tcid"
+_START_TIME_FILE = "/tmp/tracea-{{agent_slug}}-start-time"
 
 
 def _persist_tcid(tcid: str, start_time: float | None = None) -> None:
@@ -98,7 +98,7 @@ def post_event(
             "sequence": 0,
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "type": event_type,
-            "provider": "gemini-cli",
+            "provider": "{{provider}}",
             "model": "",
             "content": content,
             "tool_call_id": tid,
@@ -107,7 +107,7 @@ def post_event(
             "error": error,
             "metadata": {
                 "hook_type": event_type,
-                "gemini_tool_name": tool_name,
+                "{{agent_slug}}_tool_name": tool_name,
             },
         }]
     }
