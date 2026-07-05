@@ -114,9 +114,10 @@ class TestWorkerLifecycle:
             # Allow several poll iterations
             await asyncio.sleep(0.1)
             # The worker task must still be alive (not killed by an exception)
-            assert synth._worker_task is not None
-            assert not synth._worker_task.done(), (
-                f"worker died unexpectedly: {synth._worker_task.exception()!r}"
+            assert synth._worker is not None
+            assert synth._worker.task is not None
+            assert not synth._worker.task.done(), (
+                f"worker died unexpectedly: {synth._worker.task.exception()!r}"
             )
         finally:
             await stop_worker()
@@ -144,7 +145,9 @@ class TestProcessSession:
         mock_backend = AsyncMock()
         mock_backend.analyze = AsyncMock(return_value='[{"category": "workflow", "title": "t", "content": "c", "confidence": 0.5}]')
 
-        await _process_session(mock_backend, {"session_id": "sess-small", "user_id": ""}, None)
+        from tracea.server.rca.models import RCABackendConfig
+        cfg = RCABackendConfig(backend="openai")
+        await _process_session(mock_backend, cfg, None, {"session_id": "sess-small", "user_id": ""})
 
         # Should be marked done without calling backend (noise filter)
         db_gen = get_db()
@@ -176,7 +179,9 @@ class TestProcessSession:
         mock_backend = AsyncMock()
         mock_backend.analyze = AsyncMock(return_value='[{"category": "workflow", "title": "Read pattern", "content": "Agent reads files repeatedly", "confidence": 0.8}]')
 
-        await _process_session(mock_backend, {"session_id": "sess-ok", "user_id": "u1"}, None)
+        from tracea.server.rca.models import RCABackendConfig
+        cfg = RCABackendConfig(backend="openai")
+        await _process_session(mock_backend, cfg, None, {"session_id": "sess-ok", "user_id": "u1"})
 
         # Verify entry created
         db_gen = get_db()
@@ -214,7 +219,9 @@ class TestProcessSession:
         mock_backend = AsyncMock()
         mock_backend.analyze = AsyncMock(return_value="not json at all")
 
-        await _process_session(mock_backend, {"session_id": "sess-bad", "user_id": ""}, None)
+        from tracea.server.rca.models import RCABackendConfig
+        cfg = RCABackendConfig(backend="openai")
+        await _process_session(mock_backend, cfg, None, {"session_id": "sess-bad", "user_id": ""})
 
         db_gen = get_db()
         db2 = get_db()
@@ -243,7 +250,9 @@ class TestProcessSession:
         mock_backend = AsyncMock()
         mock_backend.analyze = AsyncMock(return_value='[{"foo": "bar"}]')
 
-        await _process_session(mock_backend, {"session_id": "sess-schema", "user_id": ""}, None)
+        from tracea.server.rca.models import RCABackendConfig
+        cfg = RCABackendConfig(backend="openai")
+        await _process_session(mock_backend, cfg, None, {"session_id": "sess-schema", "user_id": ""})
 
         db_gen = get_db()
         db2 = get_db()

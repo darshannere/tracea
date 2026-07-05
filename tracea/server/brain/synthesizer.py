@@ -47,12 +47,13 @@ from tracea.server.settings import get_brain_config
 
 logger = logging.getLogger(__name__)
 
+from tracea.server.worker_base import PollingWorker
+
 _POLL_INTERVAL = 5  # seconds between polls
 _WORKER_MIN_EVENTS = 5  # skip sessions with fewer events after type filter
 _MAX_EVENTS_FETCH = 1000  # safety cap
 
-_worker_task: asyncio.Task | None = None
-_stop_event: asyncio.Event | None = None
+_worker: PollingWorker | None = None
 
 
 def _compute_entry_id(category: str, title: str) -> str:
@@ -173,7 +174,7 @@ async def _open_db() -> aiosqlite.Connection:
     return db
 
 
-async def _process_session(backend: RCABackend, session: dict, custom_prompt: str | None) -> None:
+async def _process_session(backend: RCABackend, config: RCABackendConfig, custom_prompt: str | None, session: dict) -> None:
     """Synthesize a single session into brain entries.
 
     Manages its own DB connection lifecycle: opens, fetches events, closes
@@ -335,58 +336,25 @@ async def _mark_failed(session_id: str) -> None:
         logger.error(f"[brain] Failed to mark session {session_id} as failed: {e}")
 
 
-async def _brain_worker_loop() -> None:
-    """Poll for pending sessions, run synthesis, update status."""
-    global _stop_event
-
-    while True:
-        if _stop_event and _stop_event.is_set():
-            break
-        await asyncio.sleep(_POLL_INTERVAL)
-
-        config = await _load_config()
-        if config.backend == "disabled":
-            continue
-
-        try:
-            backend: RCABackend = load_backend(config)
-        except Exception as e:
-            logger.error(f"[brain] Backend load failed: {e}")
-            continue
-
-        custom_prompt = load_custom_prompt(config.prompt_path)
-
-        try:
-            db = await _open_db()
-            try:
-                sessions = await _fetch_pending_sessions(db)
-            finally:
-                await db.close()
-
-            for session in sessions:
-                try:
-                    await _process_session(backend, session, custom_prompt)
-                except Exception as e:
-                    logger.exception(f"[brain] Unexpected error processing session {session['session_id']}: {e}")
-                    await _mark_failed(session["session_id"])
-
-        except Exception as e:
-            logger.error(f"[brain] Worker poll error: {e}")
-
-
 async def start_worker() -> None:
     """Start the brain synthesis background worker."""
-    global _worker_task, _stop_event
-    _stop_event = asyncio.Event()
-    _worker_task = asyncio.create_task(_brain_worker_loop())
+    global _worker
+    if _worker is None:
+        _worker = PollingWorker(
+            name="brain",
+            config_loader=_load_config,
+            fetch_pending=_fetch_pending_sessions,
+            process_item=_process_session,
+            open_db=_open_db,
+            poll_interval=_POLL_INTERVAL,
+        )
+    await _worker.start()
     logger.info("[brain] Synthesizer worker started")
 
 
 async def stop_worker() -> None:
     """Stop the brain synthesis background worker."""
-    global _stop_event, _worker_task
-    if _stop_event:
-        _stop_event.set()
-    if _worker_task:
-        _worker_task.cancel()
+    global _worker
+    if _worker:
+        await _worker.stop()
     logger.info("[brain] Synthesizer worker stopped")

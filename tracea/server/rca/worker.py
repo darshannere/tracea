@@ -11,10 +11,10 @@ from tracea.server.rca.models import RCABackendConfig, RCAContext
 from tracea.server.rca.prompts import build_rca_prompt, load_custom_prompt
 from tracea.server.settings import get_rca_config
 
-_POLLO_INTERVAL = 5  # seconds between pending-issue polls
+from tracea.server.worker_base import PollingWorker
 
-_worker_task: asyncio.Task | None = None
-_stop_event: asyncio.Event | None = None
+_POLL_INTERVAL = 5  # seconds between pending-issue polls
+_worker: PollingWorker | None = None
 
 
 async def _load_config() -> RCABackendConfig:
@@ -360,60 +360,32 @@ async def _process_issue(backend: RCABackend, config: RCABackendConfig, custom_p
             await db.close()
 
 
-async def _rca_worker_loop() -> None:
-    """Poll for pending issues, run RCA, update status to done or failed."""
-    global _stop_event
-
-    while True:
-        if _stop_event and _stop_event.is_set():
-            break
-        await asyncio.sleep(_POLLO_INTERVAL)
-
-        # Reload config each poll so UI changes take effect without restart
-        config = await _load_config()
-        if config.backend == "disabled":
-            continue  # Nothing to do
-
-        try:
-            backend: RCABackend = load_backend(config)
-        except Exception as e:
-            print(f"[tracea] RCA backend load failed: {e}")
-            continue
-
-        custom_prompt = load_custom_prompt(config.prompt_path)
-
-        try:
-            db = await _open_db()
-            try:
-                # Fetch pending issues
-                cursor = await db.execute(
-                    "SELECT * FROM issues WHERE rca_status = 'pending' ORDER BY detected_at ASC LIMIT 5"
-                )
-                rows = await cursor.fetchall()
-            finally:
-                await db.close()
-
-            for row in rows:
-                try:
-                    await _process_issue(backend, config, custom_prompt, row)
-                except Exception as e:
-                    print(f"[tracea] Unexpected error processing issue {row['issue_id']}: {e}")
-
-        except Exception as e:
-            print(f"[tracea] RCAWorker poll error: {e}")
+async def _fetch_pending_issues(db) -> list[aiosqlite.Row]:
+    """Fetch pending issues."""
+    cursor = await db.execute(
+        "SELECT * FROM issues WHERE rca_status = 'pending' ORDER BY detected_at ASC LIMIT 5"
+    )
+    return await cursor.fetchall()
 
 
 async def start_worker() -> None:
     """Start the RCA background worker."""
-    global _worker_task, _stop_event
-    _stop_event = asyncio.Event()
-    _worker_task = asyncio.create_task(_rca_worker_loop())
+    global _worker
+    if _worker is None:
+        _worker = PollingWorker(
+            name="rca",
+            config_loader=_load_config,
+            fetch_pending=_fetch_pending_issues,
+            process_item=_process_issue,
+            open_db=_open_db,
+            poll_interval=_POLL_INTERVAL,
+        )
+    await _worker.start()
 
 
 async def stop_worker() -> None:
     """Stop the RCA background worker."""
-    global _stop_event, _worker_task
-    if _stop_event:
-        _stop_event.set()
-    if _worker_task:
-        _worker_task.cancel()
+    global _worker
+    if _worker:
+        await _worker.stop()
+
