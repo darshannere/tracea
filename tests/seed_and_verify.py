@@ -24,7 +24,7 @@ What gets created:
     - 5 brain entries seeded directly (3 categories: workflow, error_fix, codebase)
 
 Tabs verified:
-    Sessions, Agents, Issues, Live (observagent), Brain
+    Sessions, Agents, Issues, Live, Brain
 """
 
 import argparse
@@ -600,25 +600,25 @@ def verify_all() -> bool:
                                "empty_response", "model_error_5xx", "rate_limit_hit"]:
             results.append(_check(f"rule '{expected_rule}' fired", expected_rule in rule_ids))
 
-    print("\n── Live tab (/api/v1/observagent/*) ─────────────────────────────")
-    r = client.get("/api/v1/observagent/events?limit=50")
+    print("\n── Live tab (/api/v1/*) ──────────────────────────────────────────")
+    r = client.get("/api/v1/events?limit=50")
     ok = r.status_code == 200
-    results.append(_check("GET /api/v1/observagent/events returns 200", ok))
+    results.append(_check("GET /api/v1/events returns 200", ok))
     if ok:
         evs = r.json()
-        results.append(_check("observagent events is non-empty", len(evs) > 0, f"count={len(evs)}"))
+        results.append(_check("live events is non-empty", len(evs) > 0, f"count={len(evs)}"))
 
-    r = client.get("/api/v1/observagent/sessions")
+    r = client.get("/api/v1/sessions")
     ok = r.status_code == 200
-    results.append(_check("GET /api/v1/observagent/sessions returns 200", ok))
+    results.append(_check("GET /api/v1/sessions returns 200", ok))
     if ok:
         data = r.json()
         obs_sessions = data.get("sessions", [])
-        results.append(_check("observagent sessions is non-empty", len(obs_sessions) > 0, f"count={len(obs_sessions)}"))
+        results.append(_check("live sessions is non-empty", len(obs_sessions) > 0, f"count={len(obs_sessions)}"))
 
-    r = client.get("/api/v1/observagent/health")
+    r = client.get("/api/v1/health")
     ok = r.status_code == 200
-    results.append(_check("GET /api/v1/observagent/health returns 200", ok))
+    results.append(_check("GET /api/v1/health returns 200", ok))
 
     print("\n── Brain tab (/api/v1/brain/*) ───────────────────────────────────")
     r = client.get("/api/v1/brain/entries")

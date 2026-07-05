@@ -165,8 +165,8 @@ class TestRouteProtection:
             "/api/v1/config/rules",
             "/api/v1/config/alerts",
             "/api/v1/config/rca",
-            "/api/v1/observagent/events",
-            "/api/v1/observagent/sessions",
+            "/api/v1/events",
+            "/api/v1/sessions",
         ]
         blocked = []
         for route in routes:

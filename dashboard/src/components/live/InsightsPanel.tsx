@@ -70,11 +70,11 @@ export function InsightsPanel() {
     setCostDailyStatus('loading')
     setCostAgentStatus('loading')
 
-    api.get(`/api/v1/observagent/insights/cost-daily${userParam}`)
+    api.get(`/api/v1/insights/cost-daily${userParam}`)
       .then(r => { setCostDailyData(r.data); setCostDailyStatus('ok') })
       .catch(() => setCostDailyStatus('error'))
 
-    api.get(`/api/v1/observagent/insights/cost-by-agent${userParam}`)
+    api.get(`/api/v1/insights/cost-by-agent${userParam}`)
       .then(r => { setCostAgentData(r.data); setCostAgentStatus('ok') })
       .catch(() => setCostAgentStatus('error'))
   }, [activeTab, selectedUser])
@@ -99,7 +99,7 @@ export function InsightsPanel() {
   useEffect(() => {
     const fetchStalled = () => {
       setStalledStatus('loading')
-      api.get(`/api/v1/observagent/insights/stalled-agents${userParam}`)
+      api.get(`/api/v1/insights/stalled-agents${userParam}`)
         .then(r => { setStalledAgents(r.data); setStalledStatus('ok') })
         .catch(() => setStalledStatus('error'))
     }
@@ -118,7 +118,7 @@ export function InsightsPanel() {
       const baseParams = new URLSearchParams({ session_id: latestSessionId })
       if (selectedUser) baseParams.append('user_id', selectedUser)
 
-      api.get(`/api/v1/observagent/insights/error-rate?${baseParams.toString()}`)
+      api.get(`/api/v1/insights/error-rate?${baseParams.toString()}`)
         .then(r => {
           const transformed = r.data.map((d: { bucket_ms: number; errors: number; total: number }) => ({
             bucket_ms: d.bucket_ms,
@@ -129,7 +129,7 @@ export function InsightsPanel() {
         })
         .catch(() => setErrorRateStatus('error'))
 
-      api.get(`/api/v1/observagent/insights/latency-by-tool?${baseParams.toString()}`)
+      api.get(`/api/v1/insights/latency-by-tool?${baseParams.toString()}`)
         .then(r => { setLatencyData(r.data); setLatencyStatus('ok') })
         .catch(() => setLatencyStatus('error'))
     }
@@ -147,11 +147,11 @@ export function InsightsPanel() {
       const baseParams = new URLSearchParams({ session_id: latestSessionId })
       if (selectedUser) baseParams.append('user_id', selectedUser)
 
-      api.get(`/api/v1/observagent/insights/activity?${baseParams.toString()}`)
+      api.get(`/api/v1/insights/activity?${baseParams.toString()}`)
         .then(r => { setActivityData(r.data); setActivityStatus('ok') })
         .catch(() => setActivityStatus('error'))
 
-      api.get(`/api/v1/observagent/insights/tokens-over-time?${baseParams.toString()}`)
+      api.get(`/api/v1/insights/tokens-over-time?${baseParams.toString()}`)
         .then(r => { setTokensData(r.data); setTokensStatus('ok') })
         .catch(() => setTokensStatus('error'))
     }
@@ -192,7 +192,7 @@ export function InsightsPanel() {
               ) : costDailyStatus === 'error' ? (
                 <Retry onClick={() => {
                   setCostDailyStatus('loading')
-                  api.get(`/api/v1/observagent/insights/cost-daily${userParam}`)
+                  api.get(`/api/v1/insights/cost-daily${userParam}`)
                     .then(r => { setCostDailyData(r.data); setCostDailyStatus('ok') })
                     .catch(() => setCostDailyStatus('error'))
                 }} />
@@ -219,7 +219,7 @@ export function InsightsPanel() {
               ) : costAgentStatus === 'error' ? (
                 <Retry onClick={() => {
                   setCostAgentStatus('loading')
-                  api.get(`/api/v1/observagent/insights/cost-by-agent${userParam}`)
+                  api.get(`/api/v1/insights/cost-by-agent${userParam}`)
                     .then(r => { setCostAgentData(r.data); setCostAgentStatus('ok') })
                     .catch(() => setCostAgentStatus('error'))
                 }} />
@@ -269,7 +269,7 @@ export function InsightsPanel() {
                 <ChartSection title="Tool Call Activity">
                   {activityStatus === 'loading' ? <Skeleton /> : activityStatus === 'error' ? <Retry onClick={() => {
                     setActivityStatus('loading')
-                    api.get(`/api/v1/observagent/insights/activity?session_id=${latestSessionId}`)
+                    api.get(`/api/v1/insights/activity?session_id=${latestSessionId}`)
                       .then(r => { setActivityData(r.data); setActivityStatus('ok') })
                       .catch(() => setActivityStatus('error'))
                   }} /> : activityData.length === 0 ? <NoData /> : (
@@ -290,7 +290,7 @@ export function InsightsPanel() {
                 <ChartSection title="Token Burn Rate">
                   {tokensStatus === 'loading' ? <Skeleton /> : tokensStatus === 'error' ? <Retry onClick={() => {
                     setTokensStatus('loading')
-                    api.get(`/api/v1/observagent/insights/tokens-over-time?session_id=${latestSessionId}`)
+                    api.get(`/api/v1/insights/tokens-over-time?session_id=${latestSessionId}`)
                       .then(r => { setTokensData(r.data); setTokensStatus('ok') })
                       .catch(() => setTokensStatus('error'))
                   }} /> : tokensData.length === 0 ? <NoData /> : (
@@ -335,7 +335,7 @@ export function InsightsPanel() {
               ) : stalledStatus === 'error' ? (
                 <Retry onClick={() => {
                   setStalledStatus('loading')
-                  api.get(`/api/v1/observagent/insights/stalled-agents${userParam}`)
+                  api.get(`/api/v1/insights/stalled-agents${userParam}`)
                     .then(r => { setStalledAgents(r.data); setStalledStatus('ok') })
                     .catch(() => setStalledStatus('error'))
                 }} />
@@ -375,7 +375,7 @@ export function InsightsPanel() {
                   setErrorRateStatus('loading')
                   const p = new URLSearchParams({ session_id: latestSessionId })
                   if (selectedUser) p.append('user_id', selectedUser)
-                  api.get(`/api/v1/observagent/insights/error-rate?${p.toString()}`)
+                  api.get(`/api/v1/insights/error-rate?${p.toString()}`)
                     .then(r => {
                       const transformed = r.data.map((d: { bucket_ms: number; errors: number; total: number }) => ({
                         bucket_ms: d.bucket_ms,
@@ -413,7 +413,7 @@ export function InsightsPanel() {
                   setLatencyStatus('loading')
                   const p = new URLSearchParams({ session_id: latestSessionId })
                   if (selectedUser) p.append('user_id', selectedUser)
-                  api.get(`/api/v1/observagent/insights/latency-by-tool?${p.toString()}`)
+                  api.get(`/api/v1/insights/latency-by-tool?${p.toString()}`)
                     .then(r => { setLatencyData(r.data); setLatencyStatus('ok') })
                     .catch(() => setLatencyStatus('error'))
                 }} />

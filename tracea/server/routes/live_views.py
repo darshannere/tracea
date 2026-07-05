@@ -5,7 +5,7 @@ from typing import Optional
 import json
 import time
 
-router = APIRouter(prefix="/api/v1/observagent", tags=["observagent"])
+router = APIRouter(prefix="/api/v1", tags=["live_views"])
 
 
 def _ts_to_ms_expr(col: str = "timestamp") -> str:

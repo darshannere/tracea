@@ -73,11 +73,11 @@ export function LiveProvider({ children }: { children: ReactNode }) {
       const [eventsRes, sessionsRes, healthRes] = await Promise.all([
         api.get<ToolEvent[]>(
           activeSessionFilter
-            ? `/api/v1/observagent/events?session_id=${activeSessionFilter}${userParam}&limit=500`
-            : `/api/v1/observagent/events?limit=200${userParam}`
+            ? `/api/v1/events?session_id=${activeSessionFilter}${userParam}&limit=500`
+            : `/api/v1/events?limit=200${userParam}`
         ),
-        api.get<{ sessions: LiveSession[] }>(`/api/v1/observagent/sessions${userParam ? `?user_id=${encodeURIComponent(selectedUser)}` : ''}`),
-        api.get(`/api/v1/observagent/health${userParam ? `?user_id=${encodeURIComponent(selectedUser)}` : ''}`),
+        api.get<{ sessions: LiveSession[] }>(`/api/v1/sessions${userParam ? `?user_id=${encodeURIComponent(selectedUser)}` : ''}`),
+        api.get(`/api/v1/health${userParam ? `?user_id=${encodeURIComponent(selectedUser)}` : ''}`),
       ])
       setEvents(eventsRes.data)
       setSessions(sessionsRes.data.sessions)

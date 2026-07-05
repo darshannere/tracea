@@ -80,7 +80,7 @@ from tracea.server.routes.sessions import router as sessions_router
 from tracea.server.routes.issues import router as issues_router
 from tracea.server.routes.config import router as config_router
 from tracea.server.routes.agents import router as agents_router
-from tracea.server.routes.observagent import router as observagent_router
+from tracea.server.routes.live_views import router as live_views_router
 from tracea.server.routes.brain import router as brain_router
 
 app.include_router(ingest_router)
@@ -88,9 +88,5 @@ app.include_router(sessions_router)
 app.include_router(issues_router)
 app.include_router(config_router)
 app.include_router(agents_router)
-app.include_router(observagent_router)
+app.include_router(live_views_router)
 app.include_router(brain_router)
-
-
-def create_app() -> FastAPI:
-    return app
