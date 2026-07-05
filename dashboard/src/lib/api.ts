@@ -1,16 +1,59 @@
-import axios from 'axios'
-
-const api = axios.create({ baseURL: '/' })
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (!error.response) {
-      // Network error — backend is unreachable (connection refused, DNS failure, etc.)
-      window.dispatchEvent(new CustomEvent('tracea:connection-error'))
+class ApiClient {
+  private async request<T = any>(url: string, options: RequestInit = {}): Promise<{ data: T }> {
+    try {
+      const resp = await fetch(url, options)
+      if (!resp.ok) {
+        // Construct an error that behaves like AxiosError
+        const error = new Error(`Request failed with status ${resp.status}`) as any
+        error.response = {
+          status: resp.status,
+          data: await resp.text(),
+        }
+        throw error
+      }
+      const text = await resp.text()
+      let data: any = null
+      if (text) {
+        try {
+          data = JSON.parse(text)
+        } catch {
+          data = text
+        }
+      }
+      return { data: data as T }
+    } catch (err: any) {
+      if (!err.response) {
+        // Network error — backend is unreachable (connection refused, DNS failure, etc.)
+        window.dispatchEvent(new CustomEvent('tracea:connection-error'))
+      }
+      throw err
     }
-    return Promise.reject(error)
   }
-)
 
+  async get<T = any>(url: string): Promise<{ data: T }> {
+    return this.request<T>(url, { method: 'GET' })
+  }
+
+  async post<T = any>(url: string, data?: any): Promise<{ data: T }> {
+    return this.request<T>(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: data !== undefined ? JSON.stringify(data) : undefined,
+    })
+  }
+
+  async put<T = any>(url: string, data?: any): Promise<{ data: T }> {
+    return this.request<T>(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: data !== undefined ? JSON.stringify(data) : undefined,
+    })
+  }
+
+  async delete<T = any>(url: string): Promise<{ data: T }> {
+    return this.request<T>(url, { method: 'DELETE' })
+  }
+}
+
+const api = new ApiClient()
 export default api
