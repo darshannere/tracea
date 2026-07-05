@@ -1,0 +1,43 @@
+{
+  "resourceMetrics": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "claude-code"}},
+          {"key": "session_id", "value": {"stringValue": "claude-sess-001"}}
+        ]
+      },
+      "scopeMetrics": [
+        {
+          "metrics": [
+            {
+              "name": "gen_ai.client.token.usage",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "attributes": [{"key": "gen_ai.token.type", "value": {"stringValue": "input"}}],
+                    "asDouble": 523.0,
+                    "timeUnixNano": "1700000000000000000"
+                  }
+                ]
+              }
+            },
+            {
+              "name": "claude_code.cost.usage",
+              "sum": {
+                "dataPoints": [
+                  {
+                    "asDouble": 0.0157,
+                    "timeUnixNano": "1700000000000000000"
+                  }
+                ],
+                "isMonotonic": true,
+                "aggregationTemporality": 2
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

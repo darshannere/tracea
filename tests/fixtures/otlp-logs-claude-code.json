@@ -1,0 +1,32 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "claude-code"}},
+          {"key": "session_id", "value": {"stringValue": "claude-sess-001"}},
+          {"key": "gen_ai.system", "value": {"stringValue": "anthropic"}},
+          {"key": "agent_id", "value": {"stringValue": "claude-code"}}
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {"name": "claude-code"},
+          "logRecords": [
+            {
+              "timeUnixNano": "1700000000000000000",
+              "severityNumber": 9,
+              "severityText": "INFO",
+              "body": {"stringValue": "{\"id\":\"msg_01ABC\",\"type\":\"message\",\"role\":\"assistant\",\"model\":\"claude-sonnet-5-20250929\",\"content\":[{\"type\":\"text\",\"text\":\"Hello! How can I help?\"}],\"stop_reason\":\"end_turn\",\"usage\":{\"input_tokens\":15,\"output_tokens\":7}}"},
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "claude_code.api_response_body"}}
+              ],
+              "traceId": "abcdef0123456789abcdef0123456789",
+              "spanId": "1234567890abcdef"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
