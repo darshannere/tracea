@@ -7,8 +7,12 @@ from fastapi.responses import JSONResponse
 
 from tracea.server.db import init_db, close_db, get_db
 from tracea.server.detection.watcher import start_watching, stop_watching
-from tracea.server.alerts.watcher import start_watching as start_alerts_watching, stop_watching as stop_alerts_watching
-from tracea.server.alerts.dispatcher import start_dispatcher, stop_dispatcher
+from tracea.server.alerts import (
+    start_watching as start_alerts_watching,
+    stop_watching as stop_alerts_watching,
+    start_dispatcher,
+    stop_dispatcher,
+)
 from tracea.server.rca.worker import start_worker as start_rca_worker, stop_worker as stop_rca_worker
 from tracea.server.brain.synthesizer import start_worker as start_brain_worker, stop_worker as stop_brain_worker
 

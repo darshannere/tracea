@@ -105,7 +105,7 @@ async def put_alerts(body: ConfigContent, admin_user_id: str = Depends(require_a
 
     # Trigger hot-reload
     try:
-        from tracea.server.alerts.watcher import reload_alerts
+        from tracea.server.alerts import reload_alerts
         await reload_alerts()
     except Exception as e:
         raise HTTPException(status_code=500, detail={"error": f"Reload failed: {e}"})

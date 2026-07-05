@@ -308,7 +308,7 @@ async def _enqueue_alert(
     detected_at: str | None,
 ) -> None:
     """Enqueue issue for AlertDispatcher. Import lazily to avoid circular."""
-    from tracea.server.alerts.dispatcher import enqueue_issue
+    from tracea.server.alerts import enqueue_issue
     issue = {
         "issue_id": issue_id,
         "session_id": session_id,
