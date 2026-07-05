@@ -152,44 +152,53 @@ def _start_flush_timer() -> None:
 
 
 async def _flush_loop() -> None:
-    """Background timer: flush buffer every FLUSH_MS milliseconds."""
+    """Background timer: flush buffer every FLUSH_MS milliseconds. Exits when idle."""
+    global _flush_timer
     while True:
         await asyncio.sleep(_FLUSH_MS / 1000.0)
         await flush_events()
+        async with _write_lock:
+            if not _write_buffer:
+                _flush_timer = None
+                break
 
 
 async def enqueue_events(events: list[TracedEvent]) -> None:
     """Add events to write buffer. Triggers flush at 100 events or timer."""
     global _write_buffer
-    for event in events:
-        tokens = event.tokens_used
-        _write_buffer.append((
-            str(event.event_id),
-            str(event.session_id),
-            event.agent_id,
-            event.user_id or "",
-            event.sequence,
-            event.timestamp.isoformat(),
-            "1",  # schema_version
-            event.type,
-            event.provider,
-            event.model,
-            event.role or "",
-            event.content or "",
-            event.tool_call_id or "",
-            event.tool_name or "",
-            event.status_code,           # None → NULL, not ""
-            event.error or "",
-            event.duration_ms,
-            tokens.input if tokens else 0,
-            tokens.output if tokens else 0,
-            tokens.total if tokens else 0,
-            event.cost_usd,              # None → NULL, not ""
-            json.dumps(event.metadata),
-        ))
-        # Check if we need to flush
+    should_flush = False
+    async with _write_lock:
+        for event in events:
+            tokens = event.tokens_used
+            _write_buffer.append((
+                str(event.event_id),
+                str(event.session_id),
+                event.agent_id,
+                event.user_id or "",
+                event.sequence,
+                event.timestamp.isoformat(),
+                "1",  # schema_version
+                event.type,
+                event.provider,
+                event.model,
+                event.role or "",
+                event.content or "",
+                event.tool_call_id or "",
+                event.tool_name or "",
+                event.status_code,           # None → NULL, not ""
+                event.error or "",
+                event.duration_ms,
+                tokens.input if tokens else 0,
+                tokens.output if tokens else 0,
+                tokens.total if tokens else 0,
+                event.cost_usd,              # None → NULL, not ""
+                json.dumps(event.metadata),
+            ))
         if len(_write_buffer) >= _FLUSH_EVENTS:
-            await flush_events()
+            should_flush = True
+
+    if should_flush:
+        await flush_events()
 
     # Start flush timer if not running
     if _flush_timer is None:
