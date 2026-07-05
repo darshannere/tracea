@@ -1,17 +1,16 @@
 """DetectionEngine — evaluates rules against ingested events asynchronously."""
 import asyncio
 import json
+import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
 from tracea.server.detection.watcher import get_rules
 from tracea.server.detection.conditions import evaluate_condition, check_repetition
 
-# In-memory deduplication: track processed event IDs per boot
-_processed_event_ids: set[str] = set()
-
 # Session sliding windows for repetition detection
 _recent_by_session: dict[str, list[dict]] = {}
+
 
 
 def _event_to_dict(event) -> dict:
@@ -76,6 +75,11 @@ def _check_repetition_for_rule(event_dict: dict, rep_field: str, min_count: int,
             count += 1
         else:
             break
+
+    # Prevent memory leaks: bound the cache size
+    if len(_recent_by_session) > 1000:
+        oldest_key = next(iter(_recent_by_session))
+        _recent_by_session.pop(oldest_key, None)
 
     # Add current event to window (keep last 20 per session)
     _recent_by_session[session_id] = (recent + [event_dict])[-20:]
@@ -144,21 +148,16 @@ async def run_detection(events: list) -> None:
     Called via asyncio.create_task after SQLite commit.
     Does NOT block the HTTP ingest response.
     """
-    global _processed_event_ids
     rules = await get_rules()
     if not rules:
         return
 
     for event in events:
-        if hasattr(event, 'get'):
-            event_id = str(event.get('event_id', ''))
-        else:
-            event_id = str(getattr(event, 'event_id', ''))
-        if event_id in _processed_event_ids:
-            continue
-        _processed_event_ids.add(event_id)
-
         event_dict = _event_to_dict(event)
+
+        # Cleanup memory for ended sessions
+        if event_dict.get('type') == 'session_end':
+            _recent_by_session.pop(event_dict.get('session_id', ''), None)
 
         for rule in rules:
             try:
@@ -290,6 +289,10 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
             rule_description=rule.get('description', ''),
             detected_at=None,  # filled by dispatcher from DB if needed
         ))
+    except sqlite3.IntegrityError:
+        # Avoid creating duplicate issues if rule execution is replayed/redundant
+        await db.rollback()
+        print(f"[tracea] Issue already exists for rule {rule.get('id')} and event {event_id}, ignoring.")
     except Exception as e:
         print(f"[tracea] Failed to create issue: {e}")
 
