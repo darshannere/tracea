@@ -72,7 +72,7 @@ export function ApiKeyDisplay() {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Paste the API key from your tracea server console or data/api_key.txt
+          Paste the API key from your tracea server console
         </p>
       </div>
     )

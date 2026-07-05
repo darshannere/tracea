@@ -63,7 +63,7 @@ export function AuthErrorState({
       </div>
 
       <p className="text-xs text-muted-foreground/60 mt-1">
-        Find your API key in the server console or <code className="bg-muted px-1 rounded">data/api_key.txt</code>
+        Find your API key in the server console
       </p>
     </div>
   )

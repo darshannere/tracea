@@ -53,7 +53,8 @@ docker-compose up --build
 
 - Server: `http://localhost:8080`
 - Dashboard: `http://localhost:5173`
-- API key: printed in logs + written to `./data/api_key.txt`
+- API key: printed in logs
+
 
 ### Local Development
 
@@ -84,7 +85,7 @@ Open `http://localhost:5173` and paste your API key.
 **3. Send an event**
 
 ```bash
-API_KEY=$(cat data/api_key.txt)
+API_KEY="your-api-key"
 
 curl -X POST http://localhost:8080/api/v1/events \
   -H "Authorization: Bearer $API_KEY" \
@@ -218,7 +219,6 @@ cp .env.example .env
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `TRACEA_DB_PATH` | SQLite database path | `./data/tracea.db` |
-| `TRACEA_API_KEY_FILE` | API key read/write path | `./data/api_key.txt` |
 | `TRACEA_DATA_DIR` | Config directory (rules, alerts) | `./data` |
 | `TRACEA_RULES_PATH` | Detection rules YAML | `./data/detection_rules.yaml` |
 | `TRACEA_ALERTS_PATH` | Alerts routing YAML | `./data/alerts.yaml` |
