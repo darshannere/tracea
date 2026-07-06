@@ -21,7 +21,7 @@
 #   PostToolUse: {session_id, hook_event_name, tool_name, tool_input, tool_response, ...}
 #   Stop:        {session_id, hook_event_name, stop_hook_active, ...}
 #
-set -euo pipefail
+set -uo pipefail
 
 HOOK_TYPE="${1:-}"
 SERVER_URL="${TRACEA_SERVER_URL:-}"
@@ -137,17 +137,11 @@ tracea_post_event() {
 case "$HOOK_TYPE" in
   pre)
     TOOL_CALL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
-    # Persist tool_call_id for the post hook (Claude runs hooks sequentially)
-    echo "$TOOL_CALL_ID" > "/tmp/tracea-last-tcid"
     tracea_post_event "tool_call" "$EFFECTIVE_TOOL_INPUT" "" 0 "$TOOL_CALL_ID"
     ;;
 
   post)
-    TOOL_CALL_ID=""
-    if [[ -f "/tmp/tracea-last-tcid" ]]; then
-      TOOL_CALL_ID=$(cat "/tmp/tracea-last-tcid")
-      rm -f "/tmp/tracea-last-tcid"
-    fi
+    TOOL_CALL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
     tracea_post_event "tool_result" "$EFFECTIVE_TOOL_INPUT" "" 0 "$TOOL_CALL_ID"
     ;;
 
