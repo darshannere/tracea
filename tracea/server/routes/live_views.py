@@ -218,11 +218,49 @@ async def list_sessions_for_tree(user_id: Optional[str] = None, auth_user_id: st
     return {"sessions": sessions}
 
 
-@router.get("/insights/cost-daily")
-async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
+@router.get("/insights/totals")
+async def insight_totals(
+    user_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    """Server-side aggregation across ALL sessions (not paginated).
+
+    Returns totals that the dashboard KPI cards use directly, avoiding
+    the undercount that happens when summing across a paginated session list.
+    """
     db = get_db()
-    where = "WHERE started_at >= date('now', '-6 days')"
-    params = []
+    where = "WHERE 1=1"
+    params: list = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    if agent_id:
+        where += " AND agent_id = ?"
+        params.append(agent_id)
+    rows = await db.execute(f"""
+        SELECT
+            COUNT(*)                                                   AS total_sessions,
+            COALESCE(ROUND(SUM(total_cost), 6), 0)                     AS total_cost,
+            COALESCE(SUM(total_tokens), 0)                             AS total_tokens,
+            COALESCE(SUM(event_count), 0)                              AS total_events,
+            COALESCE(SUM(CASE WHEN issue_count > 0 THEN 1 ELSE 0 END), 0) AS sessions_with_issues
+        FROM sessions
+        {where}
+    """, params)
+    row = await rows.fetchone()
+    return dict(row)
+
+
+@router.get("/insights/cost-daily")
+async def cost_daily(
+    user_id: Optional[str] = None,
+    days: int = Query(30, ge=1, le=365),
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    db = get_db()
+    where = f"WHERE started_at >= date('now', '-{days} days')"
+    params: list = []
     if user_id:
         where += " AND user_id = ?"
         params.append(user_id)
@@ -230,6 +268,54 @@ async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(
         SELECT
             date(started_at) AS day,
             ROUND(SUM(COALESCE(total_cost, 0)), 6) AS cost_usd
+        FROM sessions
+        {where}
+        GROUP BY date(started_at)
+        ORDER BY day ASC
+    """, params)
+    return [dict(r) for r in await rows.fetchall()]
+
+
+@router.get("/insights/tokens-daily")
+async def tokens_daily(
+    user_id: Optional[str] = None,
+    days: int = Query(30, ge=1, le=365),
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    db = get_db()
+    where = f"WHERE started_at >= date('now', '-{days} days')"
+    params: list = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
+        SELECT
+            date(started_at) AS day,
+            SUM(total_tokens) AS tokens
+        FROM sessions
+        {where}
+        GROUP BY date(started_at)
+        ORDER BY day ASC
+    """, params)
+    return [dict(r) for r in await rows.fetchall()]
+
+
+@router.get("/insights/events-daily")
+async def events_daily(
+    user_id: Optional[str] = None,
+    days: int = Query(30, ge=1, le=365),
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    db = get_db()
+    where = f"WHERE started_at >= date('now', '-{days} days')"
+    params: list = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
+        SELECT
+            date(started_at) AS day,
+            SUM(event_count) AS events
         FROM sessions
         {where}
         GROUP BY date(started_at)
