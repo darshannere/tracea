@@ -111,13 +111,16 @@ async function postOpencodeEvent(
   error?: string,
   durationMs = 0,
   toolName?: string,
-  toolCallId?: string
+  toolCallId?: string,
+  sessionKey: string = sessionId,
+  role?: string
 ): Promise<void> {
   await postEvent({
     events: [
       {
-        ...buildEvent(eventType, sessionId, CONFIG.agentId, {
+        ...buildEvent(eventType, sessionKey, CONFIG.agentId, {
           content: content ?? null,
+          role: (role as any) ?? null,
           tool_call_id: toolCallId ?? null,
           tool_name: toolName ?? null,
           duration_ms: durationMs,
@@ -143,6 +146,47 @@ const traceaPlugin: Plugin = {
     "session.start": async () => {
       sessionId = newSessionId();
       await postOpencodeEvent("session_start");
+    },
+
+    "message.part.updated": async (input: any, output: any) => {
+      const part = output?.part || output;
+      const sessionKey = (input?.session?.id || sessionId) as string;
+
+      if (!part || typeof part !== "object") return;
+      const ptype = part.type;
+
+      if (ptype === "text") {
+        const role = input?.message?.role || part.role || "assistant";
+        const text = part.text || "";
+        if (!text) return;
+        await postOpencodeEvent(
+          "chat.completion",
+          text,
+          undefined, 0,
+          undefined, undefined,
+          sessionKey, role,
+        );
+      }
+    },
+
+    "message.updated": async (input: any, output: any) => {
+      const msg = output?.message || output;
+      const sessionKey = (input?.session?.id || sessionId) as string;
+      if (!msg || typeof msg !== "object") return;
+      const role = msg.role;
+      const parts = msg.parts || [];
+      const textParts = parts
+        .filter((p: any) => p?.type === "text")
+        .map((p: any) => p.text || "")
+        .filter(Boolean);
+      if (textParts.length === 0) return;
+      await postOpencodeEvent(
+        "chat.completion",
+        textParts.join("\n"),
+        undefined, 0,
+        undefined, undefined,
+        sessionKey, role,
+      );
     },
 
     "tool.execute.before": async (ctx: HookContext) => {

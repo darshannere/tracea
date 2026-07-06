@@ -12,8 +12,8 @@ This is the recommended path for agents that support it. Agents without native O
 |---|---|---|---|
 | **Claude Code** | ✅ | Full LLM I/O + tool calls + spans + metrics | env vars |
 | **Gemini CLI** | ✅ | Full LLM I/O + metrics | `.gemini/settings.json` |
-| OpenCode | ❌ | tool calls only (plugin) | [`tracea-plugins/opencode/`](../tracea-plugins/opencode/) |
-| Kimi CLI | ❌ | tool calls only (plugin) | [`tracea-plugins/kimi/`](../tracea-plugins/kimi/) |
+| OpenCode | ❌ | Full LLM I/O + tool calls (plugin) | [`tracea-plugins/opencode/`](../tracea-plugins/opencode/) |
+| Kimi CLI | ❌ | tool calls only (plugin); no message capture available | [`tracea-plugins/kimi/`](../tracea-plugins/kimi/) |
 
 ---
 
