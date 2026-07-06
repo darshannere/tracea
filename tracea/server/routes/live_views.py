@@ -49,7 +49,11 @@ async def list_events(
             output_tokens,
             content,
             tool_summary,
-            metadata
+            metadata,
+            type,
+            role,
+            model,
+            cost_usd
         FROM events
         WHERE type = 'tool_call'
           AND tool_name IS NOT NULL
@@ -78,7 +82,12 @@ async def list_events(
         COALESCE(tc.tool_summary, tc.content) AS tool_summary,
         tc.input_tokens      AS nearest_input_tokens,
         tc.output_tokens     AS nearest_output_tokens,
-        CASE WHEN tr.tool_call_id IS NULL THEN 'PreToolUse' ELSE 'PostToolUse' END AS hook_type
+        CASE WHEN tr.tool_call_id IS NULL THEN 'PreToolUse' ELSE 'PostToolUse' END AS hook_type,
+        tc.type,
+        tc.role,
+        tc.content,
+        tc.model,
+        tc.cost_usd
     FROM tool_calls tc
     LEFT JOIN tool_results tr
         ON tr.tool_call_id = tc.tool_call_id
@@ -106,7 +115,12 @@ async def list_events(
         COALESCE(tool_summary, content, error) AS tool_summary,
         input_tokens         AS nearest_input_tokens,
         output_tokens        AS nearest_output_tokens,
-        'PostToolUse'        AS hook_type
+        'PostToolUse'        AS hook_type,
+        type,
+        NULL                 AS role,
+        content,
+        model,
+        cost_usd
     FROM events
     WHERE type = 'error'
       AND tool_name IS NOT NULL
@@ -125,8 +139,46 @@ async def list_events(
     error_rows = await db.execute(error_sql, error_params)
     errors = [dict(r) for r in await error_rows.fetchall()]
 
+    # Include chat.completion events
+    chat_user_filter = "AND user_id = ?" if user_id else ""
+    chat_sql = f"""
+    SELECT
+        event_id             AS id,
+        ''                   AS tool_name,
+        session_id,
+        agent_id,
+        tool_call_id,
+        {_ts_to_ms_expr()}   AS timestamp,
+        duration_ms,
+        NULL                 AS exit_status,
+        content              AS tool_summary,
+        input_tokens         AS nearest_input_tokens,
+        output_tokens        AS nearest_output_tokens,
+        'PostToolUse'        AS hook_type,
+        type,
+        role,
+        content,
+        model,
+        cost_usd
+    FROM events
+    WHERE type = 'chat.completion'
+      {session_filter}
+      {chat_user_filter}
+    ORDER BY timestamp DESC
+    LIMIT ?
+    """
+    chat_params = []
+    if session_id:
+        chat_params.append(session_id)
+    if user_id:
+        chat_params.append(user_id)
+    chat_params.append(limit)
+
+    chat_rows = await db.execute(chat_sql, chat_params)
+    chats = [dict(r) for r in await chat_rows.fetchall()]
+
     # Merge and re-sort by timestamp DESC, then take top limit
-    all_events = events + errors
+    all_events = events + errors + chats
     all_events.sort(key=lambda x: x["timestamp"], reverse=True)
     all_events = all_events[:limit]
 
