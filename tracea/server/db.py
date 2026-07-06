@@ -265,13 +265,17 @@ def _ns_to_iso(ns: int) -> str:
     return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc).isoformat()
 
 
+_SESSION_ID_KEYS = ("session.id", "session_id", "claude_code.session_id", "process.id")
+
+
 def _span_session_id(span: dict) -> str:
-    """Extract session_id from span resource_attrs (Claude Code sets it)."""
-    resource = span.get("resource_attrs", {}) or {}
-    for key in ("session_id", "claude_code.session_id", "session.id", "process.id"):
-        val = resource.get(key)
-        if val:
-            return str(val)
+    """Extract session_id. Claude Code puts session.id in span-level attrs,
+    Gemini CLI in resource attrs — check both."""
+    for attrs in (span.get("span_attrs") or {}, span.get("resource_attrs") or {}):
+        for key in _SESSION_ID_KEYS:
+            val = attrs.get(key)
+            if val:
+                return str(val)
     return f"trace-{span.get('trace_id', '')}" if span.get("trace_id") else ""
 
 
@@ -322,12 +326,13 @@ async def enqueue_metrics(metrics: list[dict]) -> int:
 
 
 def _metric_session_id(metric: dict) -> str:
-    """Extract session_id from metric resource_attrs."""
-    resource = metric.get("resource_attrs", {}) or {}
-    for key in ("session_id", "claude_code.session_id", "session.id", "process.id"):
-        val = resource.get(key)
-        if val:
-            return str(val)
+    """Extract session_id. Claude Code puts session.id in data-point attrs,
+    not resource attrs — check both."""
+    for attrs in (metric.get("attributes") or {}, metric.get("resource_attrs") or {}):
+        for key in _SESSION_ID_KEYS:
+            val = attrs.get(key)
+            if val:
+                return str(val)
     return ""
 
 

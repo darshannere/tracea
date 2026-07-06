@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime, timezone
 from typing import Any
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from tracea.server.models import TracedEvent, TokenUsage
 
@@ -369,11 +369,13 @@ def _genai_provider(resource_attrs: dict, log_attrs: dict) -> str:
 
 
 def _derive_genai_session_id(log: dict, resource_attrs: dict) -> str:
-    """Gemini CLI sets session.id and process.id in resource attributes."""
-    for key in ("session.id", "session_id", "process.id", "tracea.session_id"):
-        val = resource_attrs.get(key)
-        if val:
-            return str(val)
+    """Gemini CLI sets session.id in resource attributes; other clients may
+    put it in per-record log attrs."""
+    for attrs in (resource_attrs, log.get("log_attrs") or {}):
+        for key in ("session.id", "session_id", "process.id", "tracea.session_id"):
+            val = attrs.get(key)
+            if val:
+                return str(val)
     if log.get("trace_id"):
         return f"trace-{log['trace_id']}"
     return f"unknown-{uuid4()}"
@@ -383,13 +385,18 @@ def _derive_genai_session_id(log: dict, resource_attrs: dict) -> str:
 # Helpers
 # ---------------------------------------------------------------------------
 
+_SESSION_ID_KEYS = ("session.id", "session_id", "claude_code.session_id")
+
+
 def _derive_session_id(log: Any) -> str:
     if isinstance(log, dict):
-        resource_attrs = log.get("resource_attrs", {}) or {}
-        for key in ("session_id", "claude_code.session_id"):
-            val = resource_attrs.get(key)
-            if val:
-                return str(val)
+        # Claude Code puts session.id in per-record log attrs; some clients
+        # use resource attrs — check both.
+        for attrs in (log.get("log_attrs") or {}, log.get("resource_attrs") or {}):
+            for key in _SESSION_ID_KEYS:
+                val = attrs.get(key)
+                if val:
+                    return str(val)
         # Fallback to trace_id (a span/log without a session is still groupable
         # by its trace)
         if log.get("trace_id"):
@@ -499,11 +506,14 @@ async def spans_to_events_and_persist(spans: list[dict], user_id: str = "") -> N
         if tn and s.get("span_id"):
             parent_tool_names[s["span_id"]] = tn
 
-    # 3. Extract tool events
+    # 3. Extract tool events + LLM usage events
     tool_events: list[TracedEvent] = []
     for span in spans:
         events = _span_to_tool_events(span, user_id, parent_tool_names)
         tool_events.extend(events)
+        llm_event = _claude_llm_request_event(span, user_id)
+        if llm_event:
+            tool_events.append(llm_event)
 
     if tool_events:
         await enqueue_events(tool_events)
@@ -523,6 +533,14 @@ def _span_to_tool_events(
     attrs = span.get("span_attrs", {}) or {}
     resource_attrs = span.get("resource_attrs", {}) or {}
     parent_tool_names = parent_tool_names or {}
+
+    # Claude Code tool activity already arrives via hooks with full content
+    # and the same tool_call_id — emitting from its spans (claude_code.tool,
+    # .tool.execution, .tool.blocked_on_user all match below) would triplicate
+    # every call in the session timeline. Spans are still persisted for the
+    # trace tree; skip event extraction.
+    if (span.get("name") or "").startswith("claude_code."):
+        return []
 
     is_tool = (
         attrs.get("gen_ai.operation.name") == "execute_tool"
@@ -585,6 +603,49 @@ def _span_to_tool_events(
     return events
 
 
+def _claude_llm_request_event(span: dict, user_id: str) -> TracedEvent | None:
+    """Emit a chat.completion event with token usage from a claude_code.llm_request
+    span. This is what feeds real token/cost totals into session aggregates —
+    hook events carry no usage data."""
+    if span.get("name") != "claude_code.llm_request":
+        return None
+    attrs = span.get("span_attrs", {}) or {}
+    resource_attrs = span.get("resource_attrs", {}) or {}
+
+    in_tok = _to_int(attrs.get("input_tokens"))
+    out_tok = _to_int(attrs.get("output_tokens"))
+    tokens = TokenUsage(input=in_tok, output=out_tok, total=in_tok + out_tok) if (in_tok or out_tok) else None
+    model = str(attrs.get("gen_ai.request.model") or attrs.get("model") or "")
+
+    return TracedEvent(
+        # Deterministic id: OTLP retransmits of the same span replace, not duplicate
+        event_id=str(uuid5(NAMESPACE_URL, f"otlp-llm-{span.get('span_id')}")),
+        session_id=_span_session_id_local(span, resource_attrs),
+        agent_id=str(resource_attrs.get("agent_id") or "claude-code"),
+        user_id=user_id,
+        timestamp=_ns_to_datetime(span.get("start_time_unix_nano", 0)),
+        type="chat.completion",
+        role="assistant",
+        provider="claude-code",
+        model=model,
+        duration_ms=_to_int(attrs.get("duration_ms")),
+        tokens_used=tokens,
+        cost_usd=_estimate_cost(tokens, "claude-code", model),
+        error=None if attrs.get("success", True) else str(attrs.get("error") or "llm_request failed"),
+        metadata={
+            "integration": "otlp",
+            "source": "span",
+            "event.name": "claude_code.llm_request",
+            "trace_id": span.get("trace_id"),
+            "span_id": span.get("span_id"),
+            "stop_reason": attrs.get("stop_reason"),
+            "cache_read_tokens": _to_int(attrs.get("cache_read_tokens")),
+            "cache_creation_tokens": _to_int(attrs.get("cache_creation_tokens")),
+            "request_id": attrs.get("request_id"),
+        },
+    )
+
+
 def _tool_name_from_span_name(name: str) -> str:
     """Extract tool name from a span like 'tool Bash' or 'claude_code.tool.execution'."""
     if not name:
@@ -598,10 +659,12 @@ def _tool_name_from_span_name(name: str) -> str:
 
 
 def _span_session_id_local(span: dict, resource_attrs: dict) -> str:
-    for key in ("session_id", "claude_code.session_id", "session.id", "process.id"):
-        val = resource_attrs.get(key)
-        if val:
-            return str(val)
+    # Claude Code puts session.id in span-level attrs, Gemini in resource attrs.
+    for attrs in (span.get("span_attrs") or {}, resource_attrs):
+        for key in ("session.id", "session_id", "claude_code.session_id", "process.id"):
+            val = attrs.get(key)
+            if val:
+                return str(val)
     if span.get("trace_id"):
         return f"trace-{span['trace_id']}"
     return f"unknown-{uuid4()}"
@@ -620,11 +683,10 @@ async def persist_metrics(metrics: list[dict], user_id: str = "") -> None:
 
     # Fire metric-based detection rules for any sessions touched
     import asyncio
+    from tracea.server.db import _metric_session_id
     from tracea.server.detection.engine import run_metric_detection
-    session_ids = {m.get("resource_attrs", {}).get("session_id")
-                   or m.get("resource_attrs", {}).get("session.id")
-                   for m in metrics}
-    session_ids.discard(None)
+    session_ids = {_metric_session_id(m) for m in metrics}
+    session_ids.discard("")
     for sid in session_ids:
         asyncio.create_task(run_metric_detection(sid))
 

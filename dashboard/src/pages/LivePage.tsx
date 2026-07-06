@@ -135,13 +135,13 @@ function LivePageInner() {
                   </TabsList>
                   <ContentToggle />
                 </div>
-                <TabsContent value="log" className="flex-1 flex flex-col overflow-hidden mt-0">
+                <TabsContent value="log" className="flex-1 flex-col overflow-hidden mt-0 data-[state=active]:flex">
                   <ToolLog />
                 </TabsContent>
-                <TabsContent value="spans" className="flex-1 flex flex-col overflow-hidden mt-0">
+                <TabsContent value="spans" className="flex-1 flex-col overflow-hidden mt-0 data-[state=active]:flex">
                   <SpanTree sessionId={activeSessionFilter} />
                 </TabsContent>
-                <TabsContent value="metrics" className="flex-1 flex flex-col overflow-hidden mt-0">
+                <TabsContent value="metrics" className="flex-1 flex-col overflow-hidden mt-0 data-[state=active]:flex">
                   <MetricsCharts sessionId={activeSessionFilter} />
                 </TabsContent>
               </Tabs>

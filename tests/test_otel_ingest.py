@@ -70,8 +70,9 @@ class TestParser:
         # parent linking
         tool_span = next(s for s in spans if s["span_id"] == "2222222222222222")
         assert tool_span["parent_span_id"] == "1111111111111111"
-        # resource attrs propagated
-        assert spans[0]["resource_attrs"]["session_id"] == "claude-sess-001"
+        # span-level + resource attributes propagated
+        assert spans[0]["span_attrs"]["session.id"] == "claude-sess-001"
+        assert spans[0]["resource_attrs"]["service.name"] == "claude-code"
         # trace_id hex string
         assert len(spans[0]["trace_id"]) == 32
 
@@ -90,7 +91,7 @@ class TestParser:
         proto_bytes = req.SerializeToString()
         spans = parse_traces(proto_bytes, "application/x-protobuf")
         assert len(spans) == 3
-        assert spans[0]["resource_attrs"]["session_id"] == "claude-sess-001"
+        assert spans[0]["span_attrs"]["session.id"] == "claude-sess-001"
 
     def test_parse_logs_json_claude_code(self):
         from tracea.server.otel.parser import parse_logs
@@ -223,9 +224,28 @@ class TestOTLPRoutes:
 
         rows_spans = _read_db("SELECT COUNT(*) AS c FROM spans")
         assert rows_spans[0]["c"] == 3
+        # claude_code.* spans are suppressed from the tool timeline (hooks own it);
+        # session.id is carried in span-level attributes, not resource attributes.
         tool_rows = _read_db("SELECT type FROM events WHERE type LIKE 'tool%'")
-        # 2 tool spans (with end_time) → 2 tool_call + 2 tool_result = 4
+        assert len(tool_rows) == 0
+        sess_rows = _read_db("SELECT DISTINCT session_id FROM spans")
+        assert sess_rows == [{"session_id": "claude-sess-001"}]
+
+    def test_post_traces_genai_tool_spans_emit_events(self, client):
+        body = _load("otlp-traces-genai-tools.json")
+        resp = client.post("/v1/traces", content=body,
+                           headers={"Content-Type": "application/json"})
+        assert resp.status_code == 200
+
+        rows_spans = _read_db("SELECT COUNT(*) AS c FROM spans")
+        assert rows_spans[0]["c"] == 2
+        tool_rows = _read_db(
+            "SELECT type FROM events WHERE type LIKE 'tool%' ORDER BY timestamp, type"
+        )
         assert len(tool_rows) == 4
+        assert [r["type"] for r in tool_rows] == [
+            "tool_call", "tool_call", "tool_result", "tool_result"
+        ]
 
     def test_post_metrics_persists_rows(self, client):
         body = _load("otlp-metrics-request.json")

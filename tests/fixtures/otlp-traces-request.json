@@ -3,8 +3,7 @@
     {
       "resource": {
         "attributes": [
-          {"key": "service.name", "value": {"stringValue": "claude-code"}},
-          {"key": "session_id", "value": {"stringValue": "claude-sess-001"}}
+          {"key": "service.name", "value": {"stringValue": "claude-code"}}
         ]
       },
       "scopeSpans": [
@@ -20,6 +19,7 @@
               "startTimeUnixNano": "1700000000000000000",
               "endTimeUnixNano": "1700000001000000000",
               "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-sess-001"}},
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
                 {"key": "gen_ai.request.model", "value": {"stringValue": "claude-sonnet-5"}}
               ]
@@ -33,6 +33,7 @@
               "startTimeUnixNano": "1700000000500000000",
               "endTimeUnixNano": "1700000000900000000",
               "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-sess-001"}},
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
                 {"key": "gen_ai.tool.call.id", "value": {"stringValue": "tc-bash-1"}},
                 {"key": "gen_ai.tool.name", "value": {"stringValue": "Bash"}}
@@ -47,6 +48,7 @@
               "startTimeUnixNano": "1700000000600000000",
               "endTimeUnixNano": "1700000000800000000",
               "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-sess-001"}},
                 {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}}
               ]
             }

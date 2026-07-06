@@ -24,14 +24,34 @@ This is the recommended path for agents that support it. Agents without native O
 Add these to your shell profile (`~/.zshrc`, `~/.bashrc`) or your project's `.env`:
 
 ```bash
+# 1. Enable telemetry collection
 export CLAUDE_CODE_ENABLE_TELEMETRY=1
+
+# 2. Select OTLP exporters per signal — REQUIRED, otherwise nothing is sent.
+#    (CLAUDE_CODE_ENABLE_TELEMETRY only turns on collection; the exporter
+#    selection tells Claude Code where to send each signal.)
+export OTEL_METRICS_EXPORTER=otlp   # → metrics table (cost, tokens)
+export OTEL_LOGS_EXPORTER=otlp      # → events table (prompts, responses)
+export OTEL_TRACES_EXPORTER=otlp    # → spans table (trace tree)
+
+# 3. Traces (spans) are beta — gated behind this flag until stable.
+#    Without it, OTEL_TRACES_EXPORTER has no effect and the spans table stays empty.
+export CLAUDE_CODE_ENHANCED_TELEMETRY_BETA=1
+
+# 4. OTLP endpoint + protocol (the SDK appends /v1/{traces,metrics,logs})
 export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:8080
 
-# Capture full request/response bodies (inline, ≤60KB each):
+# 5. Capture full request/response bodies (inline, ≤60KB each):
 export OTEL_LOG_RAW_API_BODIES=1
 
-# Or, finer-grained control:
+# 6. (Optional) Faster flush intervals for local debugging.
+#    Defaults: metrics 60s, logs 5s, traces 5s.
+# export OTEL_METRIC_EXPORT_INTERVAL=10000
+# export OTEL_LOGS_EXPORT_INTERVAL=5000
+# export OTEL_TRACES_EXPORT_INTERVAL=5000
+
+# Or, finer-grained content control instead of OTEL_LOG_RAW_API_BODIES:
 # export OTEL_LOG_USER_PROMPTS=1
 # export OTEL_LOG_ASSISTANT_RESPONSES=1
 # export OTEL_LOG_TOOL_DETAILS=1
