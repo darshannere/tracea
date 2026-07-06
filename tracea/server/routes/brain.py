@@ -105,9 +105,14 @@ async def list_brain_entries(
         where_parts.append(f"rowid IN ({placeholders})")
         params.extend(fts_rowids)
 
+    # Base filter (category/user/fts) — used for the total count. The cursor
+    # predicate is appended separately below and must NOT be included in the
+    # count, otherwise the "total" shrinks as the user paginates.
+    base_where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    base_params = list(params)
+
     if cursor:
         data = _decode_cursor(cursor)
-        # Cursor is on (hit_count DESC, updated_at DESC, id)
         where_parts.append(
             "(hit_count, updated_at, id) < (?, ?, ?)"
         )
@@ -133,10 +138,9 @@ async def list_brain_entries(
             last["hit_count"], last["updated_at"], last["id"]
         )
 
-    # Total count
-    count_where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
+    # Total count uses only the base filter — not the cursor predicate.
     total_result = await db.execute(
-        f"SELECT COUNT(*) FROM brain_entries {count_where}", params
+        f"SELECT COUNT(*) FROM brain_entries {base_where}", base_params
     )
     total = (await total_result.fetchone())[0]
 
@@ -198,9 +202,14 @@ async def delete_brain_entry(entry_id: str, admin_user_id: str = Depends(require
 async def get_brain_graph(
     user_id: Optional[str] = None,
     min_confidence: float = Query(0.0, ge=0.0, le=1.0),
+    limit: int = Query(200, ge=1, le=500),
     auth_user_id: str = Depends(get_auth_user_id),
 ):
-    """Return graph topology: nodes = entries, edges = shared sessions."""
+    """Return graph topology: nodes = entries, edges = shared sessions.
+
+    The edge computation is O(n^2) over nodes in Python, so ``limit`` caps the
+    node count to keep responses bounded (default 200, max 500).
+    """
     db = get_db()
 
     where_parts: list[str] = []
@@ -215,10 +224,11 @@ async def get_brain_graph(
 
     where = f"WHERE {' AND '.join(where_parts)}" if where_parts else ""
 
-    # Fetch nodes
+    # Fetch nodes (capped)
     rows = await db.execute(
-        f"SELECT id, category, title, confidence, hit_count FROM brain_entries {where}",
-        params,
+        f"SELECT id, category, title, confidence, hit_count FROM brain_entries {where} "
+        f"ORDER BY hit_count DESC LIMIT ?",
+        params + [limit],
     )
     nodes = [
         GraphNode(
@@ -265,3 +275,35 @@ async def get_brain_graph(
                 )
 
     return {"nodes": nodes, "edges": edges}
+
+
+@router.get("/brain/status")
+async def brain_status(auth_user_id: str = Depends(get_auth_user_id)):
+    """Return aggregate brain synthesis status for the dashboard.
+
+    Counts sessions by ``brain_status`` so the UI can show how many are
+    pending / in_progress / done / failed without polling full entry lists.
+    """
+    db = get_db()
+    rows = await db.execute(
+        """
+        SELECT
+            COALESCE(brain_status, 'pending') AS status,
+            COUNT(*) AS n
+        FROM sessions
+        GROUP BY COALESCE(brain_status, 'pending')
+        """
+    )
+    counts = {r["status"]: r["n"] for r in await rows.fetchall()}
+
+    # Total brain entries (knowledge items)
+    entries_row = await db.execute("SELECT COUNT(*) AS n FROM brain_entries")
+    entries_total = (await entries_row.fetchone())["n"]
+
+    return {
+        "pending": counts.get("pending", 0),
+        "in_progress": counts.get("in_progress", 0),
+        "done": counts.get("done", 0),
+        "failed": counts.get("failed", 0),
+        "entries_total": entries_total,
+    }

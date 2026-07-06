@@ -15,12 +15,28 @@ def _pricing_path() -> Path:
     1. $TRACEA_PRICING_PATH (explicit override)
     2. $TRACEA_DATA_DIR/pricing.json (alongside rules/alerts)
     3. ./data/pricing.json (default dev location)
+    4. Bundled default (tracea/server/detection/defaults/pricing.json or
+       /app/defaults/pricing.json in Docker) — so costs work out-of-box.
     """
     explicit = os.environ.get("TRACEA_PRICING_PATH")
     if explicit:
         return Path(explicit)
     data_dir = os.environ.get("TRACEA_DATA_DIR", "./data")
     return Path(data_dir) / "pricing.json"
+
+
+_BUNDLED_DEFAULTS = [
+    Path(__file__).parent / "detection" / "defaults",  # local dev
+    Path("/app/defaults"),                              # Docker
+]
+
+
+def _bundled_pricing_path() -> Path | None:
+    for d in _BUNDLED_DEFAULTS:
+        p = d / "pricing.json"
+        if p.exists():
+            return p
+    return None
 
 
 def _load_pricing() -> dict:
@@ -31,7 +47,15 @@ def _load_pricing() -> dict:
     try:
         _PRICING_CACHE = json.loads(path.read_text())
     except (FileNotFoundError, json.JSONDecodeError):
-        _PRICING_CACHE = {"models": {}, "provider_avg": {}}
+        # Fall back to bundled defaults so cost tracking works on a fresh clone.
+        bundled = _bundled_pricing_path()
+        if bundled is not None:
+            try:
+                _PRICING_CACHE = json.loads(bundled.read_text())
+            except (FileNotFoundError, json.JSONDecodeError):
+                _PRICING_CACHE = {"models": {}, "provider_avg": {}}
+        else:
+            _PRICING_CACHE = {"models": {}, "provider_avg": {}}
     return _PRICING_CACHE
 
 

@@ -76,7 +76,9 @@ class AnthropicBackend(RCABackend):
                 {"role": "user", "content": prompt or ""},
             ],
         }
-        _ = json_mode  # acknowledged but not used natively yet
+        # Anthropic supports structured output via a system instruction.
+        if json_mode:
+            body["system"] = "Respond ONLY with valid JSON. No prose, no markdown fences."
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/messages",
@@ -89,10 +91,14 @@ class AnthropicBackend(RCABackend):
             )
             response.raise_for_status()
             data = response.json()
-            for block in data.get("content", []):
+            content_blocks = data.get("content") or []
+            for block in content_blocks:
                 if block.get("type") == "text" and "text" in block:
                     return block["text"]
-            return data["content"][0].get("text", "")
+            # No text blocks at all (e.g. tool-use-only or empty response).
+            if content_blocks:
+                return content_blocks[0].get("text", "")
+            return ""
 
 
 def load_backend(config: RCABackendConfig) -> RCABackend | None:

@@ -10,6 +10,7 @@ from tracea.server.detection.conditions import evaluate_condition, check_repetit
 
 # Session sliding windows for repetition detection
 _recent_by_session: dict[str, list[dict]] = {}
+_RECENT_SESSIONS_MAX = 1000
 
 
 
@@ -76,9 +77,12 @@ def _check_repetition_for_rule(event_dict: dict, rep_field: str, min_count: int,
         else:
             break
 
-    # Prevent memory leaks: bound the cache size
-    if len(_recent_by_session) > 1000:
-        oldest_key = next(iter(_recent_by_session))
+    # Prevent memory leaks: bound the cache size. Evict in batches so a churny
+    # workload cannot grow the cache unbounded between checks.
+    while len(_recent_by_session) > _RECENT_SESSIONS_MAX:
+        oldest_key = next(iter(_recent_by_session), None)
+        if oldest_key is None:
+            break
         _recent_by_session.pop(oldest_key, None)
 
     # Add current event to window (keep last 20 per session)
@@ -147,6 +151,8 @@ async def run_detection(events: list) -> None:
     Called via asyncio.create_task after SQLite commit.
     Does NOT block the HTTP ingest response.
     """
+    from tracea.server.detection.watcher import get_rules, track_task
+
     rules = await get_rules()
     if not rules:
         return
@@ -275,7 +281,8 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
         print(f"[tracea] Issue created: {rule.get('id', 'unknown')} ({rule.get('issue_category', '')}) for event {event_id}")
 
         # Fire alert (does NOT wait for RCA — fire-and-forget)
-        asyncio.create_task(_enqueue_alert(
+        from tracea.server.detection.watcher import track_task
+        track_task(asyncio.create_task(_enqueue_alert(
             issue_id=issue_id,
             session_id=session_id,
             issue_type=rule.get('issue_category', ''),
@@ -287,7 +294,7 @@ async def _create_issue(event, rule: dict, event_dict: dict) -> None:
             rule_id=rule.get('id', ''),
             rule_description=rule.get('description', ''),
             detected_at=None,  # filled by dispatcher from DB if needed
-        ))
+        )))
     except sqlite3.IntegrityError:
         # Avoid creating duplicate issues if rule execution is replayed/redundant
         await db.rollback()
@@ -480,11 +487,12 @@ async def _create_metric_issue(rule: dict, session_id: str, db) -> None:
 
     # Fire alert
     import asyncio
-    asyncio.create_task(_enqueue_alert(
+    from tracea.server.detection.watcher import track_task
+    track_task(asyncio.create_task(_enqueue_alert(
         issue_id=issue_id, session_id=session_id,
         issue_type=rule.get("issue_category", ""),
         severity=rule.get("severity", "medium"),
         session_cost_total=0, session_duration_ms=0, session_event_count=0,
         error_message="", rule_id=rule.get("id", ""),
         rule_description=rule.get("description", ""), detected_at=None,
-    ))
+    )))

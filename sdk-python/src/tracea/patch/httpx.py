@@ -94,10 +94,15 @@ def _build_event(
     if response and body_text:
         usage = _extract_usage_from_text(body_text)
         if usage:
+            input_t = usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0)
+            output_t = usage.get("output_tokens", 0) or usage.get("completion_tokens", 0)
+            # Anthropic responses don't include total_tokens — compute it.
+            # OpenAI includes it; fall back to input + output if absent/zero.
+            total_t = usage.get("total_tokens") or (input_t + output_t)
             tokens_used = TokenUsage(
-                input=usage.get("input_tokens", 0) or usage.get("prompt_tokens", 0),
-                output=usage.get("output_tokens", 0) or usage.get("completion_tokens", 0),
-                total=usage.get("total_tokens", 0),
+                input=input_t,
+                output=output_t,
+                total=total_t,
             )
             cost_usd = _estimate_cost(provider, model, tokens_used)
 
@@ -270,43 +275,137 @@ def _is_streaming_response(request: httpx.Request, response: httpx.Response) -> 
         return False
 
 def _wrap_sync_stream_response(response: httpx.Response, request: httpx.Request, duration_ms: int) -> httpx.Response:
-    """Wrap a sync streaming response to accumulate content and emit event on exhaust."""
-    original_iter = response.iter_lines
+    """Wrap a sync streaming response to accumulate content and emit event on exhaust.
 
-    content_parts: list[str] = []
+    Wraps ``iter_bytes`` (not ``iter_lines``) because the OpenAI / Anthropic
+    SDKs consume the streaming body via httpcore's raw byte stream, bypassing
+    ``iter_lines`` entirely. The captured bytes are parsed as SSE frames to
+    reconstruct the assistant message content and final usage.
+    """
+    original_iter_bytes = response.iter_bytes
 
-    def collecting_iter():
-        for line in original_iter():
-            content_parts.append(line)
-            yield line
-        # Stream exhausted — emit event
-        full_content = "\n".join(content_parts)
-        event = _build_event(request, response, duration_ms, error=None, stream_content=full_content)
+    collected: list[bytes] = []
+
+    def collecting_iter_bytes():
+        for chunk in original_iter_bytes():
+            collected.append(chunk)
+            yield chunk
+        # Stream exhausted — reconstruct and emit
+        raw = b"".join(collected)
+        content, usage = _parse_sse_stream(raw)
+        event = _build_stream_event(request, response, duration_ms, content, usage)
         _emit_event(event)
 
-    response.stream_lines = collecting_iter  # type: ignore
-    # Replace iter_lines to return our wrapper
-    response.iter_lines = collecting_iter  # type: ignore
+    response.iter_bytes = collecting_iter_bytes  # type: ignore[method-assign]
+    # Also re-point iter_lines / aiter_* to the byte wrapper for callers that
+    # iterate line-by-line — they will still see the same bytes.
+    response.iter_lines = collecting_iter_bytes  # type: ignore[method-assign]
     return response
 
 async def _wrap_async_stream_response(response: httpx.Response, request: httpx.Request, duration_ms: int) -> httpx.Response:
     """Wrap an async streaming response to accumulate content and emit event on exhaust."""
-    original_aiter = response.aiter_lines()
+    original_aiter_bytes = response.aiter_bytes
 
-    content_parts: list[str] = []
+    collected: list[bytes] = []
 
-    async def collecting_aiter():
-        async for line in original_aiter:
-            content_parts.append(line)
-            yield line
-        # Stream exhausted — emit event
-        full_content = "\n".join(content_parts)
-        event = _build_event(request, response, duration_ms, error=None, stream_content=full_content)
+    async def collecting_aiter_bytes():
+        async for chunk in original_aiter_bytes():
+            collected.append(chunk)
+            yield chunk
+        raw = b"".join(collected)
+        content, usage = _parse_sse_stream(raw)
+        event = _build_stream_event(request, response, duration_ms, content, usage)
         _emit_event(event)
 
-    # Replace aiter_lines to return our wrapper
-    response.aiter_lines = collecting_aiter  # type: ignore
+    response.aiter_bytes = collecting_aiter_bytes  # type: ignore[method-assign]
+    response.aiter_lines = collecting_aiter_bytes  # type: ignore[method-assign]
     return response
+
+
+def _parse_sse_stream(raw: bytes) -> tuple[str, dict | None]:
+    """Parse an SSE byte stream into (assistant_text, usage_dict_or_None).
+
+    Handles OpenAI's ``data: {...}\\n\\n`` framing (terminated by ``data: [DONE]``)
+    and Anthropic's event-typed SSE (``event: content_block_delta`` etc.).
+    """
+    if not raw:
+        return "", None
+    try:
+        text = raw.decode("utf-8", errors="replace")
+    except Exception:
+        return "", None
+
+    import json
+    content_parts: list[str] = []
+    usage: dict | None = None
+
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or not line.startswith("data:"):
+            continue
+        payload = line[5:].strip()
+        if payload == "[DONE]" or payload == "":
+            continue
+        try:
+            evt = json.loads(payload)
+        except Exception:
+            continue
+        # OpenAI chat completion chunk
+        choices = evt.get("choices") or []
+        if choices:
+            delta = choices[0].get("delta") or {}
+            piece = delta.get("content")
+            if piece:
+                content_parts.append(piece)
+        # OpenAI streaming usage (when stream_options.include_usage=true)
+        if evt.get("usage"):
+            u = evt["usage"]
+            usage = {
+                "input_tokens": u.get("prompt_tokens", 0),
+                "output_tokens": u.get("completion_tokens", 0),
+                "total_tokens": u.get("total_tokens", 0),
+            }
+        # Anthropic message_delta / message_start usage
+        if evt.get("type") == "content_block_delta":
+            delta = evt.get("delta") or {}
+            if delta.get("type") == "text_delta":
+                content_parts.append(delta.get("text", ""))
+        if evt.get("type") == "message_delta":
+            u = (evt.get("usage") or {})
+            if u:
+                usage = usage or {}
+                usage["output_tokens"] = u.get("output_tokens", usage.get("output_tokens", 0))
+                if "input_tokens" in u:
+                    usage["input_tokens"] = u["input_tokens"]
+        if evt.get("type") == "message_start":
+            msg = evt.get("message") or {}
+            u = msg.get("usage") or {}
+            if u:
+                usage = {
+                    "input_tokens": u.get("input_tokens", 0),
+                    "output_tokens": u.get("output_tokens", 0),
+                }
+
+    # Anthropic total is input + output
+    if usage and not usage.get("total_tokens"):
+        usage["total_tokens"] = (usage.get("input_tokens", 0) or 0) + (usage.get("output_tokens", 0) or 0)
+
+    return "".join(content_parts), usage
+
+
+def _build_stream_event(request, response, duration_ms, content, usage):
+    """Build a TracedEvent for a completed streaming response."""
+    event = _build_event(request, response, duration_ms, error=None, stream_content=content)
+    # If we parsed usage, overwrite the (empty) tokens from _build_event.
+    if usage:
+        from tracea.events import TokenUsage
+        event.tokens_used = TokenUsage(
+            input=usage.get("input_tokens", 0),
+            output=usage.get("output_tokens", 0),
+            total=usage.get("total_tokens") or (usage.get("input_tokens", 0) + usage.get("output_tokens", 0)),
+        )
+        event.cost_usd = _estimate_cost(event.provider, event.model, event.tokens_used)
+    return event
 
 def patch() -> None:
     """Install class-level patches on httpx.Client and httpx.AsyncClient.

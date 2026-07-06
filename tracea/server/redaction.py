@@ -10,8 +10,10 @@ import re
 # Default patterns that match common secret formats.
 # Each tuple: (compiled regex, replacement string)
 DEFAULT_PATTERNS = [
-    # OpenAI / Anthropic API keys
+    # OpenAI API keys (sk- followed by 20+ word chars)
     (re.compile(r"sk-[a-zA-Z0-9]{20,}", re.IGNORECASE), "***REDACTED_API_KEY***"),
+    # Anthropic API keys (sk-ant-...) contain hyphens — match the full token.
+    (re.compile(r"sk-ant-[a-zA-Z0-9\-_]{20,}", re.IGNORECASE), "***REDACTED_API_KEY***"),
     # Bearer tokens
     (re.compile(r"Bearer\s+[a-zA-Z0-9_\-\.]{20,}", re.IGNORECASE), "Bearer ***REDACTED_TOKEN***"),
     # Basic auth

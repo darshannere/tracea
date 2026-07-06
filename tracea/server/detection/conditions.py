@@ -1,13 +1,26 @@
 """Condition evaluation engine for detection rules."""
 from tracea.server.detection.models import Condition
 
+
+def _safe_float_cmp(cmp):
+    """Wrap a comparison so non-numeric operands return False instead of raising."""
+    def _fn(a, b):
+        if a is None or b is None:
+            return False
+        try:
+            return cmp(float(a), float(b))
+        except (TypeError, ValueError):
+            return False
+    return _fn
+
+
 OPERATORS = {
     "eq": lambda a, b: a == b,
     "ne": lambda a, b: a != b,
-    "gt": lambda a, b: (a is not None and b is not None) and float(a) > float(b),
-    "gte": lambda a, b: (a is not None and b is not None) and float(a) >= float(b),
-    "lt": lambda a, b: (a is not None and b is not None) and float(a) < float(b),
-    "lte": lambda a, b: (a is not None and b is not None) and float(a) <= float(b),
+    "gt": _safe_float_cmp(lambda x, y: x > y),
+    "gte": _safe_float_cmp(lambda x, y: x >= y),
+    "lt": _safe_float_cmp(lambda x, y: x < y),
+    "lte": _safe_float_cmp(lambda x, y: x <= y),
     "equals": lambda a, b: str(a) == str(b),
     "contains": lambda a, b: str(b) in str(a) if a is not None else False,
     "starts_with": lambda a, b: str(a).startswith(str(b)) if a is not None else False,

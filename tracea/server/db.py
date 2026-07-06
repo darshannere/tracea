@@ -70,7 +70,7 @@ async def init_db() -> aiosqlite.Connection:
     # WAL mode + performance pragmas
     await _db.execute("PRAGMA journal_mode=WAL")
     await _db.execute("PRAGMA synchronous=NORMAL")
-    await _db.execute("PRAGMA busy_timeout=5000")
+    await _db.execute("PRAGMA busy_timeout=15000")  # 15s — avoid spurious "database is locked" under load
     await _db.execute("PRAGMA cache_size=-64000")
     await _db.execute("PRAGMA temp_store=MEMORY")
     await _db.execute("PRAGMA foreign_keys=ON")  # enable ON DELETE CASCADE etc.
@@ -78,6 +78,10 @@ async def init_db() -> aiosqlite.Connection:
     await _db.execute("PRAGMA wal_autocheckpoint=0")  # We manage checkpoints manually
 
     await apply_migrations(_db)
+
+    # Re-assert pragmas after migrations — executescript() can reset them.
+    await _db.execute("PRAGMA foreign_keys=ON")
+    await _db.execute("PRAGMA busy_timeout=15000")
 
     # Start background WAL checkpoint task
     _start_checkpoint_task()
@@ -142,6 +146,11 @@ async def _wal_checkpoint_loop() -> None:
 
 _write_buffer: list[tuple] = []
 _write_lock = asyncio.Lock()
+# Global lock serializing all BEGIN IMMEDIATE write paths (events flush, spans,
+# metrics). SQLite allows only one writer at a time; without coordination,
+# concurrent BEGIN IMMEDIATE on the shared connection raises
+# "cannot start a transaction within a transaction".
+_db_write_lock = asyncio.Lock()
 _flush_timer: asyncio.Task | None = None
 _FLUSH_EVENTS = 100
 _FLUSH_MS = 500
@@ -242,26 +251,27 @@ async def enqueue_spans(spans: list[dict]) -> int:
             attrs_json,
         ))
 
-    await _db.execute("BEGIN IMMEDIATE")
-    try:
-        await _db.executemany(
-            """INSERT OR REPLACE INTO spans
-            (trace_id, span_id, parent_span_id, session_id, name, kind,
-             start_time, end_time, attributes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            rows,
-        )
-        await _db.commit()
-    except Exception:
-        await _db.rollback()
-        raise
+    async with _db_write_lock:
+        await _db.execute("BEGIN IMMEDIATE")
+        try:
+            await _db.executemany(
+                """INSERT OR REPLACE INTO spans
+                (trace_id, span_id, parent_span_id, session_id, name, kind,
+                 start_time, end_time, attributes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+            await _db.commit()
+        except Exception:
+            await _db.rollback()
+            raise
     return len(rows)
 
 
 def _ns_to_iso(ns: int) -> str:
-    """Nanoseconds since epoch → ISO 8601 UTC string."""
+    """Nanoseconds since epoch → ISO 8601 UTC string. None if missing."""
     if not ns:
-        return datetime.now(timezone.utc).isoformat()
+        return None  # caller / column should accept NULL, not "now"
     return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc).isoformat()
 
 
@@ -310,18 +320,19 @@ async def enqueue_metrics(metrics: list[dict]) -> int:
             ts,
         ))
 
-    await _db.execute("BEGIN IMMEDIATE")
-    try:
-        await _db.executemany(
-            """INSERT OR REPLACE INTO metrics
-            (metric_id, session_id, name, value, attributes, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?)""",
-            rows,
-        )
-        await _db.commit()
-    except Exception:
-        await _db.rollback()
-        raise
+    async with _db_write_lock:
+        await _db.execute("BEGIN IMMEDIATE")
+        try:
+            await _db.executemany(
+                """INSERT OR REPLACE INTO metrics
+                (metric_id, session_id, name, value, attributes, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?)""",
+                rows,
+            )
+            await _db.commit()
+        except Exception:
+            await _db.rollback()
+            raise
     return len(rows)
 
 
@@ -354,76 +365,77 @@ async def flush_events() -> int:
             _write_buffer = batch + _write_buffer
             raise RuntimeError("Database not initialized")
 
-        # Use BEGIN IMMEDIATE to avoid lock escalation
-        await _db.execute("BEGIN IMMEDIATE")
-        try:
-            await _db.executemany(
-                """INSERT OR REPLACE INTO events
-                (event_id, session_id, agent_id, user_id, sequence, timestamp, schema_version,
-                 type, provider, model, role, content, tool_call_id, tool_name,
-                 status_code, error, duration_ms, input_tokens, output_tokens,
-                 total_tokens, cost_usd, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                batch
-            )
-
-            # Upsert sessions derived from the events we just wrote.
-            # ponytail: O(session size) query, maintain incremental totals if ingest crawls
-            # We re-aggregate from the full events table so partial batches
-            # don't produce stale totals.
-            session_ids = list({row[1] for row in batch})  # row[1] = session_id
-            for sid in session_ids:
-                await _db.execute(
-                    """
-                    INSERT INTO sessions
-                        (session_id, agent_id, user_id, platform, started_at, ended_at, last_event_at,
-                         duration_ms, event_count, total_cost, total_tokens)
-                    SELECT
-                        session_id,
-                        MAX(agent_id),
-                        MAX(CASE WHEN user_id IS NOT NULL AND user_id != '' THEN user_id END),
-                        COALESCE(
-                            MAX(CASE WHEN json_extract(metadata, '$.integration') IS NOT NULL
-                                     THEN json_extract(metadata, '$.integration') END),
-                            MAX(CASE WHEN json_extract(metadata, '$.source') = 'claude-code'
-                                     THEN 'tracea-mcp' END),
-                            ''
-                        ),
-                        MIN(timestamp),
-                        MAX(CASE WHEN type = 'session_end' THEN timestamp END),
-                        MAX(timestamp),
-                        CAST(
-                            (julianday(MAX(timestamp)) - julianday(MIN(timestamp)))
-                            * 86400000 AS INTEGER
-                        ),
-                        COUNT(*),
-                        ROUND(SUM(COALESCE(cost_usd, 0.0)), 6),
-                        SUM(COALESCE(total_tokens, 0))
-                    FROM events
-                    WHERE session_id = ?
-                    GROUP BY session_id
-                    ON CONFLICT(session_id) DO UPDATE SET
-                        agent_id      = excluded.agent_id,
-                        user_id       = COALESCE(NULLIF(excluded.user_id, ''), sessions.user_id),
-                        platform      = excluded.platform,
-                        ended_at      = excluded.ended_at,
-                        last_event_at = excluded.last_event_at,
-                        duration_ms   = excluded.duration_ms,
-                        event_count   = excluded.event_count,
-                        total_cost    = excluded.total_cost,
-                        total_tokens  = excluded.total_tokens
-                    """,
-                    (sid,)
+        async with _db_write_lock:
+            # Use BEGIN IMMEDIATE to avoid lock escalation
+            await _db.execute("BEGIN IMMEDIATE")
+            try:
+                await _db.executemany(
+                    """INSERT OR REPLACE INTO events
+                    (event_id, session_id, agent_id, user_id, sequence, timestamp, schema_version,
+                     type, provider, model, role, content, tool_call_id, tool_name,
+                     status_code, error, duration_ms, input_tokens, output_tokens,
+                     total_tokens, cost_usd, metadata)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    batch
                 )
 
-            await _db.commit()
-        except Exception:
-            await _db.rollback()
-            # Put events back in buffer on failure. We already hold _write_lock
-            # (acquired at the top of this function), so restore directly —
-            # re-acquiring the non-reentrant asyncio.Lock here would deadlock.
-            _write_buffer[:] = batch + _write_buffer
-            raise
+                # Upsert sessions derived from the events we just wrote.
+                # ponytail: O(session size) query, maintain incremental totals if ingest crawls
+                # We re-aggregate from the full events table so partial batches
+                # don't produce stale totals.
+                session_ids = list({row[1] for row in batch})  # row[1] = session_id
+                for sid in session_ids:
+                    await _db.execute(
+                        """
+                        INSERT INTO sessions
+                            (session_id, agent_id, user_id, platform, started_at, ended_at, last_event_at,
+                             duration_ms, event_count, total_cost, total_tokens)
+                        SELECT
+                            session_id,
+                            MAX(agent_id),
+                            MAX(CASE WHEN user_id IS NOT NULL AND user_id != '' THEN user_id END),
+                            COALESCE(
+                                MAX(CASE WHEN json_extract(metadata, '$.integration') IS NOT NULL
+                                         THEN json_extract(metadata, '$.integration') END),
+                                MAX(CASE WHEN json_extract(metadata, '$.source') = 'claude-code'
+                                         THEN 'tracea-mcp' END),
+                                ''
+                            ),
+                            MIN(timestamp),
+                            MAX(CASE WHEN type = 'session_end' THEN timestamp END),
+                            MAX(timestamp),
+                            CAST(
+                                (julianday(MAX(timestamp)) - julianday(MIN(timestamp)))
+                                * 86400000 AS INTEGER
+                            ),
+                            COUNT(*),
+                            ROUND(SUM(COALESCE(cost_usd, 0.0)), 6),
+                            SUM(COALESCE(total_tokens, 0))
+                        FROM events
+                        WHERE session_id = ?
+                        GROUP BY session_id
+                        ON CONFLICT(session_id) DO UPDATE SET
+                            agent_id      = excluded.agent_id,
+                            user_id       = COALESCE(NULLIF(excluded.user_id, ''), sessions.user_id),
+                            platform      = excluded.platform,
+                            ended_at      = excluded.ended_at,
+                            last_event_at = excluded.last_event_at,
+                            duration_ms   = excluded.duration_ms,
+                            event_count   = excluded.event_count,
+                            total_cost    = excluded.total_cost,
+                            total_tokens  = excluded.total_tokens
+                        """,
+                        (sid,)
+                    )
+
+                await _db.commit()
+            except Exception:
+                await _db.rollback()
+                # Put events back in buffer on failure. We already hold _write_lock
+                # (acquired at the top of this function), so restore directly —
+                # re-acquiring the non-reentrant asyncio.Lock here would deadlock.
+                _write_buffer[:] = batch + _write_buffer
+                raise
 
     return len(batch)
 

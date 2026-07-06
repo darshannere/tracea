@@ -217,6 +217,7 @@ async def _open_db() -> aiosqlite.Connection:
     db = await aiosqlite.connect(DB_PATH, isolation_level=None)
     db.row_factory = aiosqlite.Row
     await db.execute("PRAGMA foreign_keys = ON")
+    await db.execute("PRAGMA busy_timeout = 15000")  # match the singleton's
     return db
 
 

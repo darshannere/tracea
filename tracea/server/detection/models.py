@@ -31,8 +31,17 @@ class SessionRule(BaseModel):
     op: Literal["gt", "gte", "lt", "lte", "eq"]
 
 
+class MetricBlock(BaseModel):
+    """A metric-based rule: aggregate a metric over a window, compare to threshold."""
+    name: str
+    aggregation: Literal["sum", "count", "max", "avg"] = "sum"
+    window: Literal["session", "recent_5m", "recent_1h"] = "session"
+    threshold: float
+    op: Literal["gt", "gte", "lt", "lte", "eq"] = "gt"
+
+
 class Rule(BaseModel):
-    """A complete detection rule with condition, repetition, and session_rules."""
+    """A complete detection rule with condition, repetition, session_rules, and optional metric."""
     id: str
     description: str
     condition: Condition
@@ -40,6 +49,7 @@ class Rule(BaseModel):
     severity: Literal["critical", "high", "medium", "low"]
     repetition: RepetitionBlock | None = None
     session_rules: SessionRule | None = None
+    metric: MetricBlock | None = None
 
 
 class RulesFile(BaseModel):

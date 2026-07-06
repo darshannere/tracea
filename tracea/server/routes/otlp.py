@@ -7,6 +7,22 @@ from tracea.server.auth import otlp_auth
 
 router = APIRouter(tags=["otlp"])
 
+# Cap OTLP request bodies at 16 MiB. A single OTLP payload can carry many
+# spans/logs/metrics, but an unbounded read lets a misbehaving exporter OOM
+# the server.
+_MAX_OTLP_BODY_BYTES = 16 * 1024 * 1024
+
+
+async def _read_body(request: Request) -> bytes:
+    """Read the request body with a hard size cap."""
+    body = await request.body()
+    if len(body) > _MAX_OTLP_BODY_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"OTLP payload too large ({len(body)} > {_MAX_OTLP_BODY_BYTES} bytes)",
+        )
+    return body
+
 
 def _decode_content_type(request: Request) -> str:
     ct = request.headers.get("content-type", "application/json").lower()
@@ -35,7 +51,7 @@ async def otlp_traces(
     request: Request,
     user_id: str = Depends(otlp_auth),
 ) -> Response:
-    body = await request.body()
+    body = await _read_body(request)
     content_type = _decode_content_type(request)
     try:
         spans = parser.parse_traces(body, content_type)
@@ -56,7 +72,7 @@ async def otlp_logs(
     request: Request,
     user_id: str = Depends(otlp_auth),
 ) -> Response:
-    body = await request.body()
+    body = await _read_body(request)
     content_type = _decode_content_type(request)
     try:
         logs = parser.parse_logs(body, content_type)
@@ -68,12 +84,16 @@ async def otlp_logs(
     events = logs_to_events(logs, user_id)
     if events:
         from tracea.server.db import enqueue_events, flush_events
+        from tracea.server.routes.ingest import _validate_user_ids
+        # OTLP path: same user_id validation as HTTP ingest (H13).
+        await _validate_user_ids(events)
         await enqueue_events(events)
         await flush_events()
         # Fire detection async, same as the MCP ingest path
         import asyncio
         from tracea.server.detection.engine import run_detection
-        asyncio.create_task(run_detection(events))
+        from tracea.server.detection.watcher import track_task
+        track_task(asyncio.create_task(run_detection(events)))
 
     return _empty_response("logs", content_type)
 
@@ -83,7 +103,7 @@ async def otlp_metrics(
     request: Request,
     user_id: str = Depends(otlp_auth),
 ) -> Response:
-    body = await request.body()
+    body = await _read_body(request)
     content_type = _decode_content_type(request)
     try:
         metrics = parser.parse_metrics(body, content_type)

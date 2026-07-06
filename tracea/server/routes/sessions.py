@@ -14,9 +14,12 @@ def encode_cursor(value: str, session_id: str) -> str:
 
 def _decode_cursor(cursor: str) -> dict:
     try:
-        return json.loads(base64.b64decode(cursor.encode()))
+        data = json.loads(base64.b64decode(cursor.encode()))
     except Exception:
         raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
+    if not isinstance(data, dict) or "v" not in data or "session_id" not in data:
+        raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
+    return data
 
 
 @router.get("/sessions")
@@ -91,11 +94,10 @@ async def get_session_events(
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, admin_user_id: str = Depends(require_admin)):
     db = get_db()
-    await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (session_id,))
-    await db.execute("DELETE FROM issues WHERE session_id = ?", (session_id,))
-    await db.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
-    await db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+    cur = await db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
     await db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail={"error": "not_found"})
     return None
 
 

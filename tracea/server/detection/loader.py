@@ -1,5 +1,6 @@
 """RulesLoader — loads and validates detection rules from YAML."""
 import os
+from pathlib import Path
 import ruamel.yaml
 from tracea.server.detection.models import Rule, RulesFile
 
@@ -8,6 +9,23 @@ _THRESHOLDS = {
     "duration_ms": int(os.getenv("THRESHOLD_LATENCY", "30000")),
     "repetition_min_count": int(os.getenv("THRESHOLD_REPEAT", "5")),
 }
+
+# Bundled defaults — works in local dev and inside the Docker image (copied to
+# /app/defaults by the Dockerfile). Prefer the in-repo path so a fresh clone
+# with no data/detection_rules.yaml still loads rules.
+_DEFAULTS_DIR_CANDIDATES = [
+    Path(__file__).parent / "defaults",            # local dev: tracea/server/detection/defaults/
+    Path("/app/defaults"),                          # Docker image
+]
+_DEFAULT_RULES_FILE = "detection_rules.yaml"
+
+
+def _find_default_rules() -> Path | None:
+    for d in _DEFAULTS_DIR_CANDIDATES:
+        p = d / _DEFAULT_RULES_FILE
+        if p.exists():
+            return p
+    return None
 
 
 def _apply_env_overrides(rules: list[dict]) -> list[dict]:
@@ -34,15 +52,22 @@ class RulesLoader:
         self._yaml.preserve_quotes = True
 
     def load(self) -> list[dict]:
-        """Load rules from YAML file, validate with Pydantic, apply env overrides."""
-        try:
-            with open(self.path) as f:
-                data = self._yaml.load(f) or {}
-        except FileNotFoundError:
-            default_path = "/app/defaults/detection_rules.yaml"
+        """Load rules from YAML file, validate with Pydantic, apply env overrides.
+
+        Falls back to bundled defaults if the configured path does not exist,
+        so the server starts cleanly on a fresh clone.
+        """
+        p = Path(self.path)
+        if not p.exists():
+            default_path = _find_default_rules()
+            if default_path is None:
+                print(f"[tracea] No rules file at {self.path} and no bundled defaults found; detection disabled.")
+                return []
             print(f"[tracea] No rules file at {self.path}, loading defaults from {default_path}")
-            with open(default_path) as f:
-                data = self._yaml.load(f) or {}
+            p = default_path
+
+        with open(p) as f:
+            data = self._yaml.load(f) or {}
 
         rules_data = data.get("rules", [])
         # Validate each rule with Pydantic

@@ -171,6 +171,7 @@ async def _open_db() -> aiosqlite.Connection:
     # Per-connection pragma — SQLite foreign keys are off by default and must be
     # enabled on every connection for ON DELETE CASCADE to take effect.
     await db.execute("PRAGMA foreign_keys=ON")
+    await db.execute("PRAGMA busy_timeout=15000")  # match the singleton's
     return db
 
 
