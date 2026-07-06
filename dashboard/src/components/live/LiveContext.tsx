@@ -15,6 +15,12 @@ export interface ToolEvent {
   tool_summary: string | null
   nearest_input_tokens: number | null
   nearest_output_tokens: number | null
+  // New fields for chat.completion events (null on tool events)
+  type: 'tool_call' | 'tool_result' | 'chat.completion' | string | null
+  role: 'user' | 'assistant' | 'system' | null
+  content: string | null
+  model: string | null
+  cost_usd: number | null
 }
 
 export interface LiveSession {
@@ -39,6 +45,7 @@ interface LiveState {
   activeAgentFilter: string | null
   timeFilter: TimeFilter
   isLoading: boolean
+  showContent: boolean
   health: {
     lastEventTs: string | null
     errorRate: number
@@ -51,6 +58,7 @@ interface LiveActions {
   setSessionFilter: (id: string | null) => void
   setAgentFilter: (id: string | null) => void
   setTimeFilter: (f: TimeFilter) => void
+  setContentVisible: (b: boolean) => void
   refresh: () => Promise<void>
 }
 
@@ -65,6 +73,15 @@ export function LiveProvider({ children }: { children: ReactNode }) {
   const [timeFilter, setTimeFilter] = useState<TimeFilter>('all')
   const [isLoading, setIsLoading] = useState(false)
   const [health, setHealth] = useState<LiveState['health']>(null)
+  const [showContent, setShowContent] = useState<boolean>(() => {
+    const saved = typeof localStorage !== 'undefined' && localStorage.getItem('tracea.showContent')
+    return saved === null ? true : saved === '1'
+  })
+
+  const setContentVisible = useCallback((b: boolean) => {
+    setShowContent(b)
+    try { localStorage.setItem('tracea.showContent', b ? '1' : '0') } catch {}
+  }, [])
 
   const refresh = useCallback(async () => {
     setIsLoading(true)
@@ -118,10 +135,12 @@ export function LiveProvider({ children }: { children: ReactNode }) {
         activeAgentFilter,
         timeFilter,
         isLoading,
+        showContent,
         health,
         setSessionFilter: handleSetSessionFilter,
         setAgentFilter: handleSetAgentFilter,
         setTimeFilter,
+        setContentVisible,
         refresh,
       }}
     >
