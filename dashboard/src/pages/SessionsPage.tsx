@@ -96,6 +96,20 @@ export function SessionsPage() {
     return res.data
   })
 
+  const { data: totals } = usePolling(async () => {
+    const params = new URLSearchParams()
+    if (selectedUser) params.append('user_id', selectedUser)
+    if (selectedAgent) params.append('agent_id', selectedAgent)
+    const res = await api.get<{
+      total_sessions: number
+      total_cost: number
+      total_tokens: number
+      total_events: number
+      sessions_with_issues: number
+    }>(`/api/v1/insights/totals?${params.toString()}`)
+    return res.data
+  })
+
   const allSessions: Session[] = data?.sessions ?? []
   const agents: AgentStat[] = agentsData?.agents ?? []
   const agentIds = agents.map((a) => a.agent_id)
@@ -326,7 +340,7 @@ export function SessionsPage() {
       )}
 
       {/* Stat Cards */}
-      <StatCards sessions={sessions} total={total} />
+      <StatCards sessions={sessions} total={total} totals={totals} />
 
       {/* Insights Charts */}
       {hasChartData && (

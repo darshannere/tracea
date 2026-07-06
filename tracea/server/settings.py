@@ -1,13 +1,33 @@
-"""App settings — key-value store in SQLite, with env-var fallback."""
+"""App settings — key-value store in SQLite, with env-var fallback.
+
+Sensitive values (API keys, tokens) are stored in the same table but are only
+ever returned to callers through explicitly-masking endpoints (e.g.
+``GET /api/v1/config/rca`` returns ``api_key_present: bool``). They are never
+returned in plaintext by ``get_settings`` batch reads that surface to clients.
+Env vars always take precedence over DB values for sensitive keys, so operators
+can pin secrets via environment without DB writes.
+"""
 
 import os
 from tracea.server.db import get_db
 
 
+def _is_sensitive(key: str) -> bool:
+    """A key is sensitive if it looks like a secret (API key, token, password)."""
+    upper = key.upper()
+    return "API_KEY" in upper or "TOKEN" in upper or "SECRET" in upper or "PASSWORD" in upper
+
+
 async def get_setting(key: str, default: str | None = None) -> str | None:
-    """Read a setting from the DB. Falls back to env var, then default."""
-    if key.endswith("API_KEY") or "API_KEY" in key:
-        return os.getenv(key, default)
+    """Read a setting. Env var wins, then DB, then default.
+
+    Sensitive keys are readable from the DB by internal callers (e.g. the RCA
+    worker) so that dashboard-configured secrets actually take effect — they
+    are simply never exposed in plaintext by config-GET endpoints.
+    """
+    env_val = os.getenv(key)
+    if env_val:
+        return env_val
 
     db = get_db()
     try:
@@ -17,15 +37,15 @@ async def get_setting(key: str, default: str | None = None) -> str | None:
             return row["value"]
     except Exception:
         pass
-    return os.getenv(key, default)
+    return default
 
 
 async def set_setting(key: str, value: str) -> None:
-    """Write or update a setting in the DB."""
-    if key.endswith("API_KEY") or "API_KEY" in key:
-        print(f"[tracea] Security warning: attempt to write {key} to DB ignored. Use environment variables instead.")
-        return
+    """Write or update a setting in the DB.
 
+    Sensitive keys are persisted so the RCA/brain workers can read them, but
+    callers must ensure they are masked before being returned to clients.
+    """
     db = get_db()
     await db.execute(
         """
@@ -41,10 +61,24 @@ async def set_setting(key: str, value: str) -> None:
 
 
 async def get_settings(keys: list[str]) -> dict[str, str | None]:
-    """Read a batch of settings from the DB. Falls back to env vars, then None."""
+    """Read a batch of settings. Env vars win; sensitive DB values are masked.
+
+    For sensitive keys, returns ``"***"`` when a DB value exists (so callers
+    can distinguish "unset" from "set but hidden") and the plaintext only when
+    an env var provides it. Internal callers that need the raw secret should
+    use :func:`get_setting` directly.
+    """
     db = get_db()
-    results = {key: os.getenv(key) for key in keys}
-    db_keys = [k for k in keys if not (k.endswith("API_KEY") or "API_KEY" in k)]
+    results: dict[str, str | None] = {}
+    db_keys = []
+    for key in keys:
+        env_val = os.getenv(key)
+        if env_val:
+            results[key] = env_val
+        else:
+            results[key] = None
+            db_keys.append(key)
+
     if db_keys:
         try:
             placeholders = ",".join("?" for _ in db_keys)
@@ -54,35 +88,44 @@ async def get_settings(keys: list[str]) -> dict[str, str | None]:
             )
             rows = await cursor.fetchall()
             for row in rows:
-                results[row["key"]] = row["value"]
+                # Mask sensitive DB values in the batch response.
+                results[row["key"]] = "***" if _is_sensitive(row["key"]) else row["value"]
         except Exception:
             pass
     return results
 
 
 async def get_rca_config() -> dict:
-    """Load RCA config from DB settings, falling back to env vars."""
-    keys = [
+    """Load RCA config from DB settings, falling back to env vars.
+
+    Reads non-sensitive config via ``get_settings`` (batch) and the API key
+    via ``get_setting`` (single, returns plaintext from env-or-DB).
+    """
+    non_secret = await get_settings([
         "TRACEA_RCA_BACKEND",
         "TRACEA_RCA_MODEL",
         "TRACEA_RCA_BASE_URL",
         "TRACEA_RCA_PROMPT_PATH",
         "TRACEA_RCA_REDACT_CONTENT",
         "TRACEA_RCA_MAX_TOKENS",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-    ]
-    values = await get_settings(keys)
+    ])
+    backend = non_secret.get("TRACEA_RCA_BACKEND") or "disabled"
 
-    backend = values.get("TRACEA_RCA_BACKEND") or "disabled"
+    # Read the matching API key for the active backend (env wins over DB).
+    api_key = ""
+    if backend == "openai":
+        api_key = (await get_setting("OPENAI_API_KEY")) or ""
+    elif backend == "anthropic":
+        api_key = (await get_setting("ANTHROPIC_API_KEY")) or ""
+
     return {
         "backend": backend,
-        "model": values.get("TRACEA_RCA_MODEL") or "",
-        "base_url": values.get("TRACEA_RCA_BASE_URL") or "",
-        "prompt_path": values.get("TRACEA_RCA_PROMPT_PATH") or "",
-        "redact_content": (values.get("TRACEA_RCA_REDACT_CONTENT") or "true").lower() == "true",
-        "max_tokens": int(values.get("TRACEA_RCA_MAX_TOKENS") or "2048"),
-        "api_key": values.get("OPENAI_API_KEY") or values.get("ANTHROPIC_API_KEY") or "",
+        "model": non_secret.get("TRACEA_RCA_MODEL") or "",
+        "base_url": non_secret.get("TRACEA_RCA_BASE_URL") or "",
+        "prompt_path": non_secret.get("TRACEA_RCA_PROMPT_PATH") or "",
+        "redact_content": (non_secret.get("TRACEA_RCA_REDACT_CONTENT") or "true").lower() == "true",
+        "max_tokens": int(non_secret.get("TRACEA_RCA_MAX_TOKENS") or "2048"),
+        "api_key": api_key,
     }
 
 
@@ -90,9 +133,9 @@ async def get_brain_config() -> dict:
     """Load brain synthesis config from DB settings, falling back to env vars.
 
     Reuses RCA LLM backend settings by default. Brain-specific overrides
-    use TRACEA_BRAIN_* prefix.
+    use TRACEA_BRAIN_* prefix. Reads API key via ``get_setting`` (plaintext).
     """
-    keys = [
+    non_secret = await get_settings([
         "TRACEA_BRAIN_BACKEND",
         "TRACEA_BRAIN_MODEL",
         "TRACEA_BRAIN_BASE_URL",
@@ -103,20 +146,25 @@ async def get_brain_config() -> dict:
         "TRACEA_RCA_MODEL",
         "TRACEA_RCA_BASE_URL",
         "TRACEA_RCA_MAX_TOKENS",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-    ]
-    values = await get_settings(keys)
+    ])
 
     # Brain defaults to RCA settings if not explicitly configured
-    backend = values.get("TRACEA_BRAIN_BACKEND") or values.get("TRACEA_RCA_BACKEND") or "disabled"
-    enabled = (values.get("TRACEA_BRAIN_ENABLED") or "true").lower() == "true"
+    backend = non_secret.get("TRACEA_BRAIN_BACKEND") or non_secret.get("TRACEA_RCA_BACKEND") or "disabled"
+    enabled = (non_secret.get("TRACEA_BRAIN_ENABLED") or "true").lower() == "true"
+
+    # Read the matching API key (env wins over DB).
+    api_key = ""
+    if backend == "openai":
+        api_key = (await get_setting("OPENAI_API_KEY")) or ""
+    elif backend == "anthropic":
+        api_key = (await get_setting("ANTHROPIC_API_KEY")) or ""
+
     return {
         "enabled": enabled,
         "backend": backend,
-        "model": values.get("TRACEA_BRAIN_MODEL") or values.get("TRACEA_RCA_MODEL") or "",
-        "base_url": values.get("TRACEA_BRAIN_BASE_URL") or values.get("TRACEA_RCA_BASE_URL") or "",
-        "prompt_path": values.get("TRACEA_BRAIN_PROMPT_PATH") or "",
-        "max_tokens": int(values.get("TRACEA_BRAIN_MAX_TOKENS") or values.get("TRACEA_RCA_MAX_TOKENS") or "2048"),
-        "api_key": values.get("OPENAI_API_KEY") or values.get("ANTHROPIC_API_KEY") or "",
+        "model": non_secret.get("TRACEA_BRAIN_MODEL") or non_secret.get("TRACEA_RCA_MODEL") or "",
+        "base_url": non_secret.get("TRACEA_BRAIN_BASE_URL") or non_secret.get("TRACEA_RCA_BASE_URL") or "",
+        "prompt_path": non_secret.get("TRACEA_BRAIN_PROMPT_PATH") or "",
+        "max_tokens": int(non_secret.get("TRACEA_BRAIN_MAX_TOKENS") or non_secret.get("TRACEA_RCA_MAX_TOKENS") or "2048"),
+        "api_key": api_key,
     }

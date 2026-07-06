@@ -21,6 +21,7 @@ from tracea.server.db import get_db
 _alerts_config: AlertsConfig | None = None
 _config_lock = asyncio.Lock()
 _stop_watching: asyncio.Event | None = None
+_alerts_watcher_task: asyncio.Task | None = None
 
 # Router config globals
 _DEDUP_WINDOW = 60  # seconds
@@ -62,28 +63,41 @@ async def get_alerts_config() -> AlertsConfig | None:
 async def _watch_loop(path: str | None = None) -> None:
     global _stop_watching
     alert_path = path or os.getenv("TRACEA_ALERTS_PATH", "./data/alerts.yaml")
-    try:
-        await reload_alerts(alert_path)
-        async for changes in awatch(alert_path):
+    backoff = 1.0
+    while True:
+        if _stop_watching and _stop_watching.is_set():
+            return
+        try:
             await reload_alerts(alert_path)
-            if _stop_watching and _stop_watching.is_set():
-                break
-    except asyncio.CancelledError:
-        pass
-    except Exception as e:
-        print(f"[tracea] AlertWatcher error: {e}")
+            async for changes in awatch(alert_path):
+                await reload_alerts(alert_path)
+                if _stop_watching and _stop_watching.is_set():
+                    return
+            backoff = 1.0
+        except asyncio.CancelledError:
+            return
+        except Exception as e:
+            print(f"[tracea] AlertWatcher error: {e}. Reconnecting in {int(backoff)}s...")
+            try:
+                await asyncio.wait_for(_stop_watching.wait(), timeout=backoff)  # type: ignore[arg-type]
+                return
+            except asyncio.TimeoutError:
+                pass
+            backoff = min(backoff * 2, 30.0)
 
 
 async def start_watching(path: str | None = None) -> None:
-    global _stop_watching
+    global _stop_watching, _alerts_watcher_task
     _stop_watching = asyncio.Event()
-    asyncio.create_task(_watch_loop(path))
+    _alerts_watcher_task = asyncio.create_task(_watch_loop(path))
 
 
 async def stop_watching() -> None:
-    global _stop_watching
+    global _stop_watching, _alerts_watcher_task
     if _stop_watching:
         _stop_watching.set()
+    if _alerts_watcher_task:
+        _alerts_watcher_task.cancel()
 
 
 # --- 2. AlertRouter logic (Resolves routes, dedup, and rate limits) ---
@@ -146,7 +160,13 @@ async def _check_rate_limit_async(bucket_key: str, now: float, refill_rate: floa
 
 
 async def get_route_for_issue(session_id: str, issue_category: str) -> Optional[AlertRoute]:
-    """Resolve route + check dedup + check rate limit. Returns route if should fire."""
+    """Resolve route + check dedup + check rate limit. Returns route if should fire.
+
+    NOTE: This does NOT mark the combo as alerted — that happens only after a
+    successful send (or permanent failure → dead-letter) in ``_dispatch_loop``.
+    Marking here would cause silently-dropped alerts when the webhook fails
+    permanently, because the dedup window would suppress the next attempt.
+    """
     route = await _resolve_route(issue_category)
     if not route:
         return None
@@ -159,7 +179,6 @@ async def get_route_for_issue(session_id: str, issue_category: str) -> Optional[
     if not allowed:
         return None
 
-    _mark_alerted(session_id, issue_category)
     return route
 
 
@@ -258,9 +277,12 @@ async def _dispatch_loop() -> None:
                 delay = await exponential_backoff_with_jitter(attempt)
                 await asyncio.sleep(delay)
 
-        if not success:
+        if success:
+            # Only record dedup after a confirmed successful delivery.
+            _mark_alerted(session_id, issue_category)
+        else:
             print(f"[tracea] Alert failed for issue {issue_id} after {_RETRY_ATTEMPTS} attempts: {last_error}")
-            await _record_failure(issue_id, route.webhook_url, last_error, _RETRY_ATTEMATTEMPTS if '_RETRY_ATTEMATTEMPTS' in globals() else _RETRY_ATTEMPTS)
+            await _record_failure(issue_id, route.webhook_url, last_error, _RETRY_ATTEMPTS)
 
 
 async def start_dispatcher() -> None:

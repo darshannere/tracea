@@ -10,9 +10,12 @@ router = APIRouter(prefix="/api/v1", tags=["issues"])
 
 def _decode_cursor(cursor: str) -> dict:
     try:
-        return json.loads(base64.b64decode(cursor.encode()))
+        data = json.loads(base64.b64decode(cursor.encode()))
     except Exception:
         raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
+    if not isinstance(data, dict) or "detected_at" not in data or "issue_id" not in data:
+        raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
+    return data
 
 
 @router.get("/issues")

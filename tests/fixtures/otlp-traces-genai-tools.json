@@ -1,0 +1,46 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "genai-cli"}},
+          {"key": "session.id", "value": {"stringValue": "gen-sess-1"}},
+          {"key": "gen_ai.system", "value": {"stringValue": "gemini"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "genai"},
+          "spans": [
+            {
+              "traceId": "11223344556677889900aabbccddeeff",
+              "spanId": "aaaaaaaaaaaaaaaa",
+              "parentSpanId": "",
+              "name": "tool Bash",
+              "kind": 3,
+              "startTimeUnixNano": "1700000000500000000",
+              "endTimeUnixNano": "1700000000900000000",
+              "attributes": [
+                {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
+                {"key": "gen_ai.tool.call.id", "value": {"stringValue": "tc-g-1"}},
+                {"key": "gen_ai.tool.name", "value": {"stringValue": "Bash"}}
+              ]
+            },
+            {
+              "traceId": "11223344556677889900aabbccddeeff",
+              "spanId": "bbbbbbbbbbbbbbbb",
+              "parentSpanId": "aaaaaaaaaaaaaaaa",
+              "name": "tool.execution",
+              "kind": 1,
+              "startTimeUnixNano": "1700000000600000000",
+              "endTimeUnixNano": "1700000000800000000",
+              "attributes": [
+                {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

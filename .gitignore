@@ -7,6 +7,7 @@ dashboard/node_modules/
 .playwright-mcp
 .pytest_cache
 .env
+uv.lock
 
 # Runtime / generated
 data/
@@ -24,6 +25,7 @@ tracea-mcp/_t.py
 
 # Internal / dev artifacts
 .planning/
+PLAN.md
 .playwright-mcp/
 bugs.md
 BUGFIX_PLAN.md

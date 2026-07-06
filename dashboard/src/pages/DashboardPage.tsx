@@ -49,6 +49,36 @@ export function DashboardPage() {
     return res.data
   })
 
+  const { data: totals } = usePolling(async () => {
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{
+      total_sessions: number
+      total_cost: number
+      total_tokens: number
+      total_events: number
+      sessions_with_issues: number
+    }>(`/api/v1/insights/totals${params}`)
+    return res.data
+  })
+
+  const { data: costDaily } = usePolling(async () => {
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ day: string; cost_usd: number }[]>(`/api/v1/insights/cost-daily${params}`)
+    return res.data
+  })
+
+  const { data: tokensDaily } = usePolling(async () => {
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ day: string; tokens: number }[]>(`/api/v1/insights/tokens-daily${params}`)
+    return res.data
+  })
+
+  const { data: eventsDaily } = usePolling(async () => {
+    const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
+    const res = await api.get<{ day: string; events: number }[]>(`/api/v1/insights/events-daily${params}`)
+    return res.data
+  })
+
   const { data: agentsData } = usePolling(async () => {
     const params = selectedUser ? `?user_id=${encodeURIComponent(selectedUser)}` : ''
     const res = await api.get<{ agents: AgentStat[] }>(`/api/v1/agents${params}`)
@@ -67,33 +97,12 @@ export function DashboardPage() {
   const agentIds = agents.map((a) => a.agent_id)
 
   const charts = useMemo(() => {
-    const dailyCost: Record<string, number> = {}
-    const dailyTokens: Record<string, number> = {}
-    const dailyEvents: Record<string, number> = {}
-
-    sessions.forEach((s) => {
-      if (!s.started_at) return
-      const day = s.started_at.split('T')[0]
-      dailyCost[day] = (dailyCost[day] ?? 0) + (s.total_cost ?? 0)
-      dailyTokens[day] = (dailyTokens[day] ?? 0) + (s.total_tokens ?? 0)
-      dailyEvents[day] = (dailyEvents[day] ?? 0) + (s.event_count ?? 0)
-    })
-
     return {
-      costSeries: Object.entries(dailyCost)
-        .map(([date, cost]) => ({ date, cost }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-30),
-      tokenSeries: Object.entries(dailyTokens)
-        .map(([date, tokens]) => ({ date, tokens }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-30),
-      eventsSeries: Object.entries(dailyEvents)
-        .map(([date, events]) => ({ date, events }))
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .slice(-30),
+      costSeries: (costDaily ?? []).map((d) => ({ date: d.day, cost: d.cost_usd })),
+      tokenSeries: (tokensDaily ?? []).map((d) => ({ date: d.day, tokens: d.tokens })),
+      eventsSeries: (eventsDaily ?? []).map((d) => ({ date: d.day, events: d.events })),
     }
-  }, [sessions])
+  }, [costDaily, tokensDaily, eventsDaily])
 
   const issueSummary = useMemo(() => ({
     errors: issues.filter((i) => i.severity === 'error').length,
@@ -131,7 +140,7 @@ export function DashboardPage() {
       </div>
 
       {/* Stat Cards */}
-      <StatCards sessions={sessions} total={sessionsData?.total ?? 0} />
+      <StatCards sessions={sessions} total={sessionsData?.total ?? 0} totals={totals} />
 
       {/* Agents + Issues summary row */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

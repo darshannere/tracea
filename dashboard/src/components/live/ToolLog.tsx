@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from 'react'
 import { useLive, type TimeFilter } from './LiveContext'
 import { ToolLogRow } from './ToolLogRow'
+import { MessageRow } from './MessageRow'
 
 const WINDOW_MS: Partial<Record<TimeFilter, number>> = {
   '5m': 5 * 60 * 1000,
@@ -9,7 +10,7 @@ const WINDOW_MS: Partial<Record<TimeFilter, number>> = {
 }
 
 export function ToolLog() {
-  const { events, activeSessionFilter, activeAgentFilter, timeFilter } = useLive()
+  const { events, activeSessionFilter, activeAgentFilter, timeFilter, showContent } = useLive()
 
   // 30-second tick keeps the time window fresh even when no events arrive
   const [tick, setTick] = useState(0)
@@ -40,9 +41,13 @@ export function ToolLog() {
 
   return (
     <div className="overflow-auto flex-1 font-mono text-xs">
-      {filtered.map((event) => (
-        <ToolLogRow key={event.id} event={event} />
-      ))}
+      {filtered.map((event) =>
+        event.type === 'chat.completion' && event.role ? (
+          <MessageRow key={event.id} event={event} showContent={showContent} />
+        ) : (
+          <ToolLogRow key={event.id} event={event} />
+        )
+      )}
 
       {filtered.length === 0 && (
         <div className="flex items-center justify-center h-full text-muted-foreground/60 text-xs py-8">

@@ -27,13 +27,16 @@ async def list_events(
     """
     db = get_db()
 
-    session_filter = "AND tc.session_id = ?" if session_id else ""
-    user_filter = "AND tc.user_id = ?" if user_id else ""
-    params: list = [limit]
+    # These filters are injected inside plain `FROM events` scopes (the
+    # tool_calls CTE and the error/chat queries) — no table alias here.
+    session_filter = "AND session_id = ?" if session_id else ""
+    user_filter = "AND user_id = ?" if user_id else ""
+    params: list = []
     if session_id:
-        params.insert(0, session_id)
+        params.append(session_id)
     if user_id:
-        params.insert(0, user_id)
+        params.append(user_id)
+    params.append(limit)
 
     # Fetch tool_call rows joined with their matching tool_result
     sql = f"""
@@ -49,7 +52,11 @@ async def list_events(
             output_tokens,
             content,
             tool_summary,
-            metadata
+            metadata,
+            type,
+            role,
+            model,
+            cost_usd
         FROM events
         WHERE type = 'tool_call'
           AND tool_name IS NOT NULL
@@ -78,7 +85,12 @@ async def list_events(
         COALESCE(tc.tool_summary, tc.content) AS tool_summary,
         tc.input_tokens      AS nearest_input_tokens,
         tc.output_tokens     AS nearest_output_tokens,
-        CASE WHEN tr.tool_call_id IS NULL THEN 'PreToolUse' ELSE 'PostToolUse' END AS hook_type
+        CASE WHEN tr.tool_call_id IS NULL THEN 'PreToolUse' ELSE 'PostToolUse' END AS hook_type,
+        tc.type,
+        tc.role,
+        tc.content,
+        tc.model,
+        tc.cost_usd
     FROM tool_calls tc
     LEFT JOIN tool_results tr
         ON tr.tool_call_id = tc.tool_call_id
@@ -106,7 +118,12 @@ async def list_events(
         COALESCE(tool_summary, content, error) AS tool_summary,
         input_tokens         AS nearest_input_tokens,
         output_tokens        AS nearest_output_tokens,
-        'PostToolUse'        AS hook_type
+        'PostToolUse'        AS hook_type,
+        type,
+        NULL                 AS role,
+        content,
+        model,
+        cost_usd
     FROM events
     WHERE type = 'error'
       AND tool_name IS NOT NULL
@@ -125,8 +142,46 @@ async def list_events(
     error_rows = await db.execute(error_sql, error_params)
     errors = [dict(r) for r in await error_rows.fetchall()]
 
+    # Include chat.completion events
+    chat_user_filter = "AND user_id = ?" if user_id else ""
+    chat_sql = f"""
+    SELECT
+        event_id             AS id,
+        ''                   AS tool_name,
+        session_id,
+        agent_id,
+        tool_call_id,
+        {_ts_to_ms_expr()}   AS timestamp,
+        duration_ms,
+        NULL                 AS exit_status,
+        content              AS tool_summary,
+        input_tokens         AS nearest_input_tokens,
+        output_tokens        AS nearest_output_tokens,
+        'PostToolUse'        AS hook_type,
+        type,
+        role,
+        content,
+        model,
+        cost_usd
+    FROM events
+    WHERE type = 'chat.completion'
+      {session_filter}
+      {chat_user_filter}
+    ORDER BY timestamp DESC
+    LIMIT ?
+    """
+    chat_params = []
+    if session_id:
+        chat_params.append(session_id)
+    if user_id:
+        chat_params.append(user_id)
+    chat_params.append(limit)
+
+    chat_rows = await db.execute(chat_sql, chat_params)
+    chats = [dict(r) for r in await chat_rows.fetchall()]
+
     # Merge and re-sort by timestamp DESC, then take top limit
-    all_events = events + errors
+    all_events = events + errors + chats
     all_events.sort(key=lambda x: x["timestamp"], reverse=True)
     all_events = all_events[:limit]
 
@@ -166,11 +221,49 @@ async def list_sessions_for_tree(user_id: Optional[str] = None, auth_user_id: st
     return {"sessions": sessions}
 
 
-@router.get("/insights/cost-daily")
-async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
+@router.get("/insights/totals")
+async def insight_totals(
+    user_id: Optional[str] = None,
+    agent_id: Optional[str] = None,
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    """Server-side aggregation across ALL sessions (not paginated).
+
+    Returns totals that the dashboard KPI cards use directly, avoiding
+    the undercount that happens when summing across a paginated session list.
+    """
     db = get_db()
-    where = "WHERE started_at >= date('now', '-6 days')"
-    params = []
+    where = "WHERE 1=1"
+    params: list = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    if agent_id:
+        where += " AND agent_id = ?"
+        params.append(agent_id)
+    rows = await db.execute(f"""
+        SELECT
+            COUNT(*)                                                   AS total_sessions,
+            COALESCE(ROUND(SUM(total_cost), 6), 0)                     AS total_cost,
+            COALESCE(SUM(total_tokens), 0)                             AS total_tokens,
+            COALESCE(SUM(event_count), 0)                              AS total_events,
+            COALESCE(SUM(CASE WHEN issue_count > 0 THEN 1 ELSE 0 END), 0) AS sessions_with_issues
+        FROM sessions
+        {where}
+    """, params)
+    row = await rows.fetchone()
+    return dict(row)
+
+
+@router.get("/insights/cost-daily")
+async def cost_daily(
+    user_id: Optional[str] = None,
+    days: int = Query(30, ge=1, le=365),
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    db = get_db()
+    where = f"WHERE started_at >= date('now', '-{days} days')"
+    params: list = []
     if user_id:
         where += " AND user_id = ?"
         params.append(user_id)
@@ -178,6 +271,54 @@ async def cost_daily(user_id: Optional[str] = None, auth_user_id: str = Depends(
         SELECT
             date(started_at) AS day,
             ROUND(SUM(COALESCE(total_cost, 0)), 6) AS cost_usd
+        FROM sessions
+        {where}
+        GROUP BY date(started_at)
+        ORDER BY day ASC
+    """, params)
+    return [dict(r) for r in await rows.fetchall()]
+
+
+@router.get("/insights/tokens-daily")
+async def tokens_daily(
+    user_id: Optional[str] = None,
+    days: int = Query(30, ge=1, le=365),
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    db = get_db()
+    where = f"WHERE started_at >= date('now', '-{days} days')"
+    params: list = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
+        SELECT
+            date(started_at) AS day,
+            SUM(total_tokens) AS tokens
+        FROM sessions
+        {where}
+        GROUP BY date(started_at)
+        ORDER BY day ASC
+    """, params)
+    return [dict(r) for r in await rows.fetchall()]
+
+
+@router.get("/insights/events-daily")
+async def events_daily(
+    user_id: Optional[str] = None,
+    days: int = Query(30, ge=1, le=365),
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    db = get_db()
+    where = f"WHERE started_at >= date('now', '-{days} days')"
+    params: list = []
+    if user_id:
+        where += " AND user_id = ?"
+        params.append(user_id)
+    rows = await db.execute(f"""
+        SELECT
+            date(started_at) AS day,
+            SUM(event_count) AS events
         FROM sessions
         {where}
         GROUP BY date(started_at)

@@ -69,3 +69,9 @@ Kimi also supports MCP servers (including `tracea-mcp`). However, **native hooks
 - **MCP**: The agent must explicitly choose to use tracea-mcp's wrapped tools
 
 If you previously added `tracea-mcp` to `~/.kimi/mcp.json`, you can remove it once hooks are configured.
+
+## Limitations
+
+As of Moonshot AI Kimi Code CLI version 2, the hook surface is restricted to tool use and session boundaries. Kimi CLI does not expose hooks for message generation (prompts and assistant responses) and does not support native OpenTelemetry export.
+
+For full LLM I/O capture, a reverse-proxy gateway routing model API calls through tracea is planned for v3. For now, this plugin is limited to tracking tool execution and duration.

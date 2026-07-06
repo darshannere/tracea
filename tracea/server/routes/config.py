@@ -28,10 +28,10 @@ def _read_yaml(path: str) -> str:
     if os.path.exists(file_path):
         with open(file_path) as f:
             return f.read()
-    # Fall back to defaults (same fallback as RulesLoader)
-    # Try Docker path first, then local dev path
-    for default_dir in ["/app/defaults", "tracea/server/detection/defaults"]:
-        default_path = os.path.join(default_dir, path)
+    # Fall back to bundled defaults (same fallback as RulesLoader)
+    from tracea.server.detection.loader import _DEFAULTS_DIR_CANDIDATES
+    for default_dir in _DEFAULTS_DIR_CANDIDATES:
+        default_path = os.path.join(str(default_dir), path)
         if os.path.exists(default_path):
             with open(default_path) as f:
                 return f.read()

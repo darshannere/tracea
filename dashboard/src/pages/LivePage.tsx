@@ -4,10 +4,30 @@ import { AgentTree } from '@/components/live/AgentTree'
 import { ToolLog } from '@/components/live/ToolLog'
 import { InsightsPanel } from '@/components/live/InsightsPanel'
 import { formatCost } from '@/components/live/format'
-import { Activity, Zap, AlertTriangle, Clock } from 'lucide-react'
+import { SpanTree } from '@/components/live/SpanTree'
+import { MetricsCharts } from '@/components/charts/MetricsCharts'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Activity, Zap, AlertTriangle, Clock, Eye, EyeOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type ActiveTab = 'log' | 'insights'
+
+function ContentToggle() {
+  const { showContent, setContentVisible } = useLive()
+  return (
+    <button
+      onClick={() => setContentVisible(!showContent)}
+      className={cn(
+        'flex items-center gap-1 px-2 py-1 rounded text-[10px] font-mono border transition-colors',
+        showContent ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-600' : 'bg-muted border-border text-muted-foreground'
+      )}
+      title={showContent ? 'Hide prompt/response content' : 'Show prompt/response content'}
+    >
+      {showContent ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+      {showContent ? 'Content: ON' : 'Content: OFF'}
+    </button>
+  )
+}
 
 function LivePageInner() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('log')
@@ -17,6 +37,7 @@ function LivePageInner() {
     health,
     sessions,
     isLoading,
+    activeSessionFilter,
   } = useLive()
 
   const totalCost = sessions.reduce((sum, s) => sum + (s.total_cost ?? 0), 0)
@@ -104,8 +125,33 @@ function LivePageInner() {
               <div className="flex-1 overflow-auto">
                 <InsightsPanel />
               </div>
+            ) : activeSessionFilter ? (
+              <Tabs defaultValue="log" className="flex-1 flex flex-col overflow-hidden">
+                <div className="shrink-0 px-4 py-2 border-b border-border bg-white flex items-center justify-between">
+                  <TabsList className="bg-muted">
+                    <TabsTrigger value="log" className="text-xs">Event Log</TabsTrigger>
+                    <TabsTrigger value="spans" className="text-xs">Trace Tree</TabsTrigger>
+                    <TabsTrigger value="metrics" className="text-xs">Metrics</TabsTrigger>
+                  </TabsList>
+                  <ContentToggle />
+                </div>
+                <TabsContent value="log" className="flex-1 flex-col overflow-hidden mt-0 data-[state=active]:flex">
+                  <ToolLog />
+                </TabsContent>
+                <TabsContent value="spans" className="flex-1 flex-col overflow-hidden mt-0 data-[state=active]:flex">
+                  <SpanTree sessionId={activeSessionFilter} />
+                </TabsContent>
+                <TabsContent value="metrics" className="flex-1 flex-col overflow-hidden mt-0 data-[state=active]:flex">
+                  <MetricsCharts sessionId={activeSessionFilter} />
+                </TabsContent>
+              </Tabs>
             ) : (
-              <ToolLog />
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="shrink-0 px-4 py-2 border-b border-border bg-white flex items-center justify-end">
+                  <ContentToggle />
+                </div>
+                <ToolLog />
+              </div>
             )}
           </div>
         </div>

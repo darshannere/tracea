@@ -67,7 +67,13 @@ async def create_user(body: UserCreate, admin_user_id: str = Depends(require_adm
         )
         await db.commit()
     except Exception as e:
-        raise HTTPException(status_code=409, detail=f"User already exists or invalid: {e}")
+        # Distinguish UNIQUE-constraint violations (genuine duplicates) from
+        # other DB errors so callers can react correctly.
+        msg = str(e).lower()
+        if "unique" in msg or "constraint" in msg:
+            raise HTTPException(status_code=409, detail=f"User '{body.user_id}' already exists")
+        # Don't leak internal exception text to the client.
+        raise HTTPException(status_code=500, detail="Failed to create user")
     return {"status": "ok", "user_id": body.user_id}
 
 

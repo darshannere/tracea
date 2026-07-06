@@ -14,9 +14,12 @@ def encode_cursor(value: str, session_id: str) -> str:
 
 def _decode_cursor(cursor: str) -> dict:
     try:
-        return json.loads(base64.b64decode(cursor.encode()))
+        data = json.loads(base64.b64decode(cursor.encode()))
     except Exception:
         raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
+    if not isinstance(data, dict) or "v" not in data or "session_id" not in data:
+        raise HTTPException(status_code=400, detail={"error": "invalid_cursor"})
+    return data
 
 
 @router.get("/sessions")
@@ -91,9 +94,65 @@ async def get_session_events(
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, admin_user_id: str = Depends(require_admin)):
     db = get_db()
-    await db.execute("DELETE FROM alerts WHERE issue_id IN (SELECT issue_id FROM issues WHERE session_id = ?)", (session_id,))
-    await db.execute("DELETE FROM issues WHERE session_id = ?", (session_id,))
-    await db.execute("DELETE FROM events WHERE session_id = ?", (session_id,))
-    await db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+    cur = await db.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
     await db.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(status_code=404, detail={"error": "not_found"})
     return None
+
+
+@router.get("/sessions/{session_id}/spans")
+async def get_session_spans(
+    session_id: str,
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    """Return the span tree for a session, nested by parent_span_id."""
+    db = get_db()
+    rows = await db.execute(
+        """SELECT trace_id, span_id, parent_span_id, name, kind,
+                  start_time, end_time, attributes
+           FROM spans WHERE session_id = ?
+           ORDER BY start_time ASC""",
+        (session_id,),
+    )
+    spans = [dict(r) for r in await rows.fetchall()]
+
+    # Build nested tree
+    by_id = {s["span_id"]: {**s, "children": []} for s in spans}
+    roots = []
+    for s in spans:
+        node = by_id[s["span_id"]]
+        parent = s.get("parent_span_id")
+        if parent and parent in by_id:
+            by_id[parent]["children"].append(node)
+        else:
+            roots.append(node)
+
+    return {"spans": roots, "flat_count": len(spans)}
+
+
+@router.get("/sessions/{session_id}/metrics")
+async def get_session_metrics(
+    session_id: str,
+    auth_user_id: str = Depends(get_auth_user_id),
+):
+    """Return metric data points for a session, grouped by name."""
+    db = get_db()
+    rows = await db.execute(
+        """SELECT name, value, attributes, timestamp
+           FROM metrics WHERE session_id = ?
+           ORDER BY timestamp ASC""",
+        (session_id,),
+    )
+    points = [dict(r) for r in await rows.fetchall()]
+
+    # Group by metric name for the frontend
+    by_name: dict[str, list] = {}
+    for p in points:
+        by_name.setdefault(p["name"], []).append({
+            "timestamp": p["timestamp"],
+            "value": p["value"],
+            "attributes": json.loads(p["attributes"]) if p["attributes"] else {},
+        })
+
+    return {"metrics": by_name, "total_points": len(points)}

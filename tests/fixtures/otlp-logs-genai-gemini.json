@@ -1,0 +1,57 @@
+{
+  "resourceLogs": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "gemini-cli"}},
+          {"key": "session.id", "value": {"stringValue": "gem-sess-042"}},
+          {"key": "gen_ai.system", "value": {"stringValue": "gemini"}}
+        ]
+      },
+      "scopeLogs": [
+        {
+          "scope": {"name": "io.opentelemetry.contrib.genai"},
+          "logRecords": [
+            {
+              "timeUnixNano": "1700000000500000000",
+              "severityNumber": 9,
+              "body": {"stringValue": ""},
+              "attributes": [
+                {"key": "event.name", "value": {"stringValue": "gen_ai.client.inference.operation.details"}},
+                {"key": "gen_ai.request.model", "value": {"stringValue": "gemini-2.5-pro"}},
+                {"key": "gen_ai.response.id", "value": {"stringValue": "resp_99"}},
+                {"key": "gen_ai.usage.input_tokens", "value": {"intValue": "42"}},
+                {"key": "gen_ai.usage.output_tokens", "value": {"intValue": "87"}},
+                {"key": "gen_ai.system_instructions", "value": {"stringValue": "You are Gemini CLI."}},
+                {"key": "gen_ai.input.messages", "value": {"arrayValue": {"values": [
+                  {"kvlistValue": {"values": [
+                    {"key": "role", "value": {"stringValue": "user"}},
+                    {"key": "parts", "value": {"arrayValue": {"values": [
+                      {"kvlistValue": {"values": [
+                        {"key": "type", "value": {"stringValue": "text"}},
+                        {"key": "text", "value": {"stringValue": "explain this code"}}
+                      ]}}
+                    ]}}}
+                  ]}}
+                ]}}},
+                {"key": "gen_ai.output.messages", "value": {"arrayValue": {"values": [
+                  {"kvlistValue": {"values": [
+                    {"key": "role", "value": {"stringValue": "model"}},
+                    {"key": "parts", "value": {"arrayValue": {"values": [
+                      {"kvlistValue": {"values": [
+                        {"key": "type", "value": {"stringValue": "text"}},
+                        {"key": "text", "value": {"stringValue": "This code does X and Y."}}
+                      ]}}
+                    ]}}}
+                  ]}}
+                ]}}}
+              ],
+              "traceId": "fedcba9876543210fedcba9876543210",
+              "spanId": "0123456789abcdef"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

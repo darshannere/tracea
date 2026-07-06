@@ -84,3 +84,49 @@ async def require_admin(
     if admins and user_id not in admins:
         raise HTTPException(status_code=403, detail="Admin privileges required")
     return user_id
+
+
+async def otlp_auth(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+) -> str:
+    """Auth for OTLP endpoints.
+
+    - disabled / dev mode → unauthenticated (return "")
+    - api_key mode → require valid bearer token
+
+    OTEL_EXPORTER_OTLP_HEADERS values are percent-encoded IN THE ENV VAR
+    ("Authorization=Bearer%20<key>") but the OTel SDK decodes them before
+    sending, so the wire header is a normal "Authorization: Bearer <key>".
+    No URL-decoding is needed here.
+    """
+    auth_mode = _get_auth_mode()
+    if auth_mode == "disabled" or os.environ.get("TRACEA_DEV_MODE") == "1":
+        return ""
+
+    if auth_mode != "api_key":
+        raise HTTPException(status_code=500, detail=f"Unknown auth mode: {auth_mode}")
+
+    token = ""
+    if credentials and credentials.credentials:
+        token = credentials.credentials.strip()
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing API key")
+
+    key_hash = hashlib.sha256(token.encode()).hexdigest()
+    db = get_db()
+    row = await db.execute(
+        "SELECT user_id FROM api_keys WHERE key_hash = ?",
+        (key_hash,)
+    )
+    result = await row.fetchone()
+    if not result:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    await db.execute(
+        "UPDATE api_keys SET last_used = datetime('now') WHERE key_hash = ?",
+        (key_hash,)
+    )
+    await db.commit()
+    return result["user_id"]
+

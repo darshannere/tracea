@@ -1,0 +1,60 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {"key": "service.name", "value": {"stringValue": "claude-code"}}
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {"name": "claude-code"},
+          "spans": [
+            {
+              "traceId": "aabbccddeeff00112233445566778899",
+              "spanId": "1111111111111111",
+              "parentSpanId": "",
+              "name": "claude_code.interaction",
+              "kind": 2,
+              "startTimeUnixNano": "1700000000000000000",
+              "endTimeUnixNano": "1700000001000000000",
+              "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-sess-001"}},
+                {"key": "gen_ai.operation.name", "value": {"stringValue": "chat"}},
+                {"key": "gen_ai.request.model", "value": {"stringValue": "claude-sonnet-5"}}
+              ]
+            },
+            {
+              "traceId": "aabbccddeeff00112233445566778899",
+              "spanId": "2222222222222222",
+              "parentSpanId": "1111111111111111",
+              "name": "claude_code.tool Bash",
+              "kind": 3,
+              "startTimeUnixNano": "1700000000500000000",
+              "endTimeUnixNano": "1700000000900000000",
+              "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-sess-001"}},
+                {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}},
+                {"key": "gen_ai.tool.call.id", "value": {"stringValue": "tc-bash-1"}},
+                {"key": "gen_ai.tool.name", "value": {"stringValue": "Bash"}}
+              ]
+            },
+            {
+              "traceId": "aabbccddeeff00112233445566778899",
+              "spanId": "3333333333333333",
+              "parentSpanId": "2222222222222222",
+              "name": "claude_code.tool.execution",
+              "kind": 1,
+              "startTimeUnixNano": "1700000000600000000",
+              "endTimeUnixNano": "1700000000800000000",
+              "attributes": [
+                {"key": "session.id", "value": {"stringValue": "claude-sess-001"}},
+                {"key": "gen_ai.operation.name", "value": {"stringValue": "execute_tool"}}
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

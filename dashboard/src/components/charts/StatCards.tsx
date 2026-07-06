@@ -1,5 +1,12 @@
 import { Zap, DollarSign, Hash, Clock, AlertCircle } from 'lucide-react'
 
+interface Totals {
+  total_cost: number
+  total_tokens: number
+  total_events: number
+  sessions_with_issues: number
+}
+
 interface StatCardsProps {
   sessions: {
     total_cost: number | null
@@ -11,6 +18,7 @@ interface StatCardsProps {
     ended_at: string | null
   }[]
   total: number
+  totals?: Totals | null
 }
 
 function formatDuration(ms: number): string {
@@ -29,17 +37,16 @@ function computeDuration(session: StatCardsProps['sessions'][0]): number {
   return end - start
 }
 
-export function StatCards({ sessions, total }: StatCardsProps) {
-  const totalCost = sessions.reduce((sum, s) => sum + (s.total_cost ?? 0), 0)
-  const totalTokens = sessions.reduce((sum, s) => sum + (s.total_tokens ?? 0), 0)
+export function StatCards({ sessions, total, totals }: StatCardsProps) {
+  const totalCost = totals ? totals.total_cost : sessions.reduce((sum, s) => sum + (s.total_cost ?? 0), 0)
+  const totalTokens = totals ? totals.total_tokens : sessions.reduce((sum, s) => sum + (s.total_tokens ?? 0), 0)
   const avgDuration = sessions.length > 0
     ? sessions.reduce((sum, s) => sum + computeDuration(s), 0) / sessions.length
     : 0
-  const sessionsWithIssues = sessions.filter((s) => (s.issue_count ?? 0) > 0).length
-  const issueRate = sessions.length > 0 ? (sessionsWithIssues / sessions.length) * 100 : 0
-  const avgEvents = sessions.length > 0
-    ? sessions.reduce((sum, s) => sum + (s.event_count ?? 0), 0) / sessions.length
-    : 0
+  const sessionsWithIssues = totals ? totals.sessions_with_issues : sessions.filter((s) => (s.issue_count ?? 0) > 0).length
+  const issueRate = total > 0 ? (sessionsWithIssues / total) * 100 : 0
+  const totalEvents = totals ? totals.total_events : sessions.reduce((sum, s) => sum + (s.event_count ?? 0), 0)
+  const avgEvents = total > 0 ? totalEvents / total : 0
 
   const stats = [
     {
