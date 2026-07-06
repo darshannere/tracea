@@ -27,13 +27,16 @@ async def list_events(
     """
     db = get_db()
 
-    session_filter = "AND tc.session_id = ?" if session_id else ""
-    user_filter = "AND tc.user_id = ?" if user_id else ""
-    params: list = [limit]
+    # These filters are injected inside plain `FROM events` scopes (the
+    # tool_calls CTE and the error/chat queries) — no table alias here.
+    session_filter = "AND session_id = ?" if session_id else ""
+    user_filter = "AND user_id = ?" if user_id else ""
+    params: list = []
     if session_id:
-        params.insert(0, session_id)
+        params.append(session_id)
     if user_id:
-        params.insert(0, user_id)
+        params.append(user_id)
+    params.append(limit)
 
     # Fetch tool_call rows joined with their matching tool_result
     sql = f"""

@@ -59,10 +59,14 @@ fi
 HOOK_TOOL_NAME=""
 HOOK_TOOL_INPUT=""
 HOOK_SESSION_ID=""
+HOOK_TOOL_USE_ID=""
+HOOK_TOOL_INPUT_ONLY=""
 if [[ -n "$STDIN_JSON" ]]; then
   HOOK_TOOL_NAME=$(echo "$STDIN_JSON" | jq -r '.tool_name // empty' 2>/dev/null)
   HOOK_TOOL_INPUT=$(echo "$STDIN_JSON" | jq -c '.tool_input // .tool_response // empty' 2>/dev/null)
   HOOK_SESSION_ID=$(echo "$STDIN_JSON" | jq -r '.session_id // empty' 2>/dev/null)
+  HOOK_TOOL_USE_ID=$(echo "$STDIN_JSON" | jq -r '.tool_use_id // empty' 2>/dev/null)
+  HOOK_TOOL_INPUT_ONLY=$(echo "$STDIN_JSON" | jq -c '.tool_input // empty' 2>/dev/null)
 fi
 
 # Prefer Claude Code's session_id from stdin; fall back to hostname+pid derivation
@@ -73,6 +77,19 @@ fi
 # Resolve effective tool name + input: stdin JSON first, then env var fallback
 EFFECTIVE_TOOL_NAME="${HOOK_TOOL_NAME:-${CLAUDE_TOOL_NAME:-}}"
 EFFECTIVE_TOOL_INPUT="${HOOK_TOOL_INPUT:-${CLAUDE_TOOL_INPUT:-null}}"
+
+# Correlation id shared by the pre/post pair of one tool invocation.
+# Claude Code sends tool_use_id on both PreToolUse and PostToolUse; older
+# versions don't, so fall back to a deterministic hash of session+tool+input
+# (tool_input is identical on both hook calls).
+# ponytail: hash fallback collides for back-to-back identical calls of the
+# same tool+input; fine for correlation, drop it once tool_use_id is universal.
+if [[ -n "$HOOK_TOOL_USE_ID" ]]; then
+  TOOL_CALL_ID="$HOOK_TOOL_USE_ID"
+else
+  TOOL_CALL_ID=$(python3 -c "import sys, uuid; print(uuid.uuid5(uuid.NAMESPACE_URL, sys.argv[1]))" \
+    "${SESSION_ID}|${EFFECTIVE_TOOL_NAME}|${HOOK_TOOL_INPUT_ONLY}")
+fi
 
 tracea_post_event() {
   local event_type="$1"
@@ -136,12 +153,10 @@ tracea_post_event() {
 
 case "$HOOK_TYPE" in
   pre)
-    TOOL_CALL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
     tracea_post_event "tool_call" "$EFFECTIVE_TOOL_INPUT" "" 0 "$TOOL_CALL_ID"
     ;;
 
   post)
-    TOOL_CALL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
     tracea_post_event "tool_result" "$EFFECTIVE_TOOL_INPUT" "" 0 "$TOOL_CALL_ID"
     ;;
 
