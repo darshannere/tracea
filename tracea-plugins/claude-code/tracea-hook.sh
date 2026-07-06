@@ -16,9 +16,10 @@
 #   TRACEA_API_KEY     (default: dev-mode)
 #   TRACEA_AGENT_ID    (default: claude-code)
 #
-# Claude Code sets these env vars on every hook invocation:
-#   CLAUDE_TOOL_NAME   — name of the tool being invoked
-#   CLAUDE_TOOL_INPUT  — JSON string of tool arguments
+# Claude Code sends a JSON object on stdin for every hook invocation:
+#   PreToolUse:  {session_id, hook_event_name, tool_name, tool_input, ...}
+#   PostToolUse: {session_id, hook_event_name, tool_name, tool_input, tool_response, ...}
+#   Stop:        {session_id, hook_event_name, stop_hook_active, ...}
 #
 set -euo pipefail
 
@@ -46,6 +47,33 @@ AGENT_ID="${AGENT_ID:-claude-code}"
 # them, or every process hashes the same literal string and gets one constant UUID.
 SESSION_ID="${TRACEA_SESSION_ID:-$(python3 -c "import uuid; print(uuid.uuid5(uuid.NAMESPACE_DNS, '$(hostname)-$$'))")}"
 
+# Claude Code passes hook context as JSON on stdin. Read it once and parse
+# the fields we need. Fall back to env vars for older Claude Code versions
+# that may have used CLAUDE_TOOL_NAME / CLAUDE_TOOL_INPUT.
+STDIN_JSON=""
+if [[ ! -t 0 ]]; then
+  STDIN_JSON=$(cat)
+fi
+
+# Extract fields from stdin JSON (empty string if stdin was empty/invalid)
+HOOK_TOOL_NAME=""
+HOOK_TOOL_INPUT=""
+HOOK_SESSION_ID=""
+if [[ -n "$STDIN_JSON" ]]; then
+  HOOK_TOOL_NAME=$(echo "$STDIN_JSON" | jq -r '.tool_name // empty' 2>/dev/null)
+  HOOK_TOOL_INPUT=$(echo "$STDIN_JSON" | jq -c '.tool_input // .tool_response // empty' 2>/dev/null)
+  HOOK_SESSION_ID=$(echo "$STDIN_JSON" | jq -r '.session_id // empty' 2>/dev/null)
+fi
+
+# Prefer Claude Code's session_id from stdin; fall back to hostname+pid derivation
+if [[ -n "$HOOK_SESSION_ID" ]]; then
+  SESSION_ID="$HOOK_SESSION_ID"
+fi
+
+# Resolve effective tool name + input: stdin JSON first, then env var fallback
+EFFECTIVE_TOOL_NAME="${HOOK_TOOL_NAME:-${CLAUDE_TOOL_NAME:-}}"
+EFFECTIVE_TOOL_INPUT="${HOOK_TOOL_INPUT:-${CLAUDE_TOOL_INPUT:-null}}"
+
 tracea_post_event() {
   local event_type="$1"
   local content="${2:-}"
@@ -67,7 +95,7 @@ tracea_post_event() {
     --arg aid "$AGENT_ID" \
     --arg uid "$USER_ID" \
     --arg tid "$tool_call_id" \
-    --arg tn "${CLAUDE_TOOL_NAME:-}" \
+    --arg tn "${EFFECTIVE_TOOL_NAME:-}" \
     --arg content "$content" \
     --arg error "$error" \
     --argjson duration "$duration_ms" \
@@ -108,21 +136,19 @@ tracea_post_event() {
 
 case "$HOOK_TYPE" in
   pre)
-    INPUT_JSON="${CLAUDE_TOOL_INPUT:-null}"
     TOOL_CALL_ID=$(python3 -c "import uuid; print(uuid.uuid4())")
     # Persist tool_call_id for the post hook (Claude runs hooks sequentially)
     echo "$TOOL_CALL_ID" > "/tmp/tracea-last-tcid"
-    tracea_post_event "tool_call" "$INPUT_JSON" "" 0 "$TOOL_CALL_ID"
+    tracea_post_event "tool_call" "$EFFECTIVE_TOOL_INPUT" "" 0 "$TOOL_CALL_ID"
     ;;
 
   post)
-    INPUT_JSON="${CLAUDE_TOOL_INPUT:-null}"
     TOOL_CALL_ID=""
     if [[ -f "/tmp/tracea-last-tcid" ]]; then
       TOOL_CALL_ID=$(cat "/tmp/tracea-last-tcid")
       rm -f "/tmp/tracea-last-tcid"
     fi
-    tracea_post_event "tool_result" "$INPUT_JSON" "" 0 "$TOOL_CALL_ID"
+    tracea_post_event "tool_result" "$EFFECTIVE_TOOL_INPUT" "" 0 "$TOOL_CALL_ID"
     ;;
 
   stop)
