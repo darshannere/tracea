@@ -139,7 +139,7 @@ def test_claude_code_api_response_body(monkeypatch):
     assert e.tokens_used.input == 100
     assert e.tokens_used.output == 50
     assert e.tokens_used.total == 150
-    assert e.cost_usd == pytest.approx(150 * 0.00001)
+    assert e.cost_usd == pytest.approx(0.00105)
     assert e.metadata["response_id"] == "msg_123"
     assert e.metadata["stop_reason"] == "end_turn"
     assert e.metadata["raw_body"] == resp_payload
@@ -295,16 +295,24 @@ def test_genai_inference_mapping(monkeypatch):
     assert events[2].content == "how are you?"
     assert events[3].content == "Hi! I am doing well."
 
-    for e in events:
+    for e in events[:-1]:
         assert e.provider == "gemini-cli"
         assert e.model == "gemini-2.5-pro"
         assert e.session_id == "gem-sess-1"
         assert e.user_id == "u1"
-        assert e.tokens_used is not None
-        assert e.tokens_used.input == 42
-        assert e.tokens_used.output == 87
-        assert e.tokens_used.total == 129
-        assert e.cost_usd == pytest.approx(129 * 0.00001)
+        assert e.tokens_used is None
+        assert e.cost_usd is None
+
+    last_e = events[-1]
+    assert last_e.provider == "gemini-cli"
+    assert last_e.model == "gemini-2.5-pro"
+    assert last_e.session_id == "gem-sess-1"
+    assert last_e.user_id == "u1"
+    assert last_e.tokens_used is not None
+    assert last_e.tokens_used.input == 42
+    assert last_e.tokens_used.output == 87
+    assert last_e.tokens_used.total == 129
+    assert last_e.cost_usd == pytest.approx(0.000487)
 
     # TRACEA_CAPTURE_CONTENT = 0 gates content and skips system_instructions emission entirely
     monkeypatch.setenv("TRACEA_CAPTURE_CONTENT", "0")
@@ -408,7 +416,7 @@ async def test_spans_to_events_and_persist():
     assert len(tool_events) == 4
     # Check that tool_call and tool_result were emitted
     assert [e['type'] for e in tool_events] == ['tool_call', 'tool_call', 'tool_result', 'tool_result']
-    assert any(e['tool_name'] == 'Bash' for e in tool_events)
+    assert all(e['tool_name'] == 'Bash' for e in tool_events)
 
 
 @pytest.mark.asyncio

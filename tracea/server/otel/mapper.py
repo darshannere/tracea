@@ -13,18 +13,21 @@ from tracea.server.models import TracedEvent, TokenUsage
 # ---------------------------------------------------------------------------
 
 def logs_to_events(logs: list[dict], user_id: str = "") -> list[TracedEvent]:
-    """Map OTLP log records → TracedEvent list.
+    """Map OTLP log records to tracea TracedEvents.
 
-    Dispatches by source (Claude Code vs generic GenAI). GenAI dispatch is
-    added in Task 5.
+    Called by the /v1/logs route. Normalizes Claude Code and Gemini log events
+    to tracea event schema.
     """
     events: list[TracedEvent] = []
     capture_content = os.environ.get("TRACEA_CAPTURE_CONTENT", "1") != "0"
+    redact_content = os.environ.get("TRACEA_REDACT_CONTENT", "0") == "1"
 
     for log in logs:
         try:
             if not isinstance(log, dict):
                 raise TypeError("Log record must be a dict")
+            if redact_content:
+                log = _redact_log(log)
             if _is_claude_code(log):
                 events.extend(_claude_code_log_to_events(log, user_id, capture_content))
             elif _is_genai_inference(log):
@@ -188,7 +191,7 @@ def _from_anthropic_response(
             total=int(usage_raw.get("input_tokens", 0) or 0)
                  + int(usage_raw.get("output_tokens", 0) or 0),
         )
-    cost = _estimate_cost(tokens)
+    cost = _estimate_cost(tokens, "anthropic", model)
 
     meta = dict(common["metadata"])
     meta["response_id"] = data.get("id")
@@ -237,17 +240,15 @@ def _genai_log_to_events(
     tokens = None
     if in_tok or out_tok:
         tokens = TokenUsage(input=in_tok, output=out_tok, total=in_tok + out_tok)
-    cost = _estimate_cost(tokens)
+    cost = _estimate_cost(tokens, provider, model)
 
-    common = dict(
+    common_no_tokens = dict(
         session_id=session_id,
         agent_id=str(resource_attrs.get("agent_id") or provider),
         user_id=user_id,
         timestamp=ts,
         provider=provider,
         model=model,
-        tokens_used=tokens,
-        cost_usd=cost,
         metadata={
             "integration": "otlp",
             "source": provider,
@@ -267,7 +268,7 @@ def _genai_log_to_events(
             event_id=str(uuid4()),
             type="chat.completion", role="system",
             content=_stringify(sys_instr),
-            **common,
+            **common_no_tokens,
         ))
 
     # Input messages → one chat.completion per message with its role
@@ -279,19 +280,23 @@ def _genai_log_to_events(
             type="chat.completion",
             role=_normalize_role(msg.get("role", "user")),
             content=_flatten_genai_parts(msg.get("parts", [])) if capture_content else None,
-            **common,
+            **common_no_tokens,
         ))
 
-    # Output messages → role=assistant
-    for msg in attrs.get("gen_ai.output.messages", []) or []:
-        if not isinstance(msg, dict):
-            continue
+    # Output messages → role=assistant. Attach tokens/cost ONLY to the last
+    # output event so session aggregates don't multi-count (one inference =
+    # one billable token batch).
+    output_msgs = [m for m in (attrs.get("gen_ai.output.messages") or []) if isinstance(m, dict)]
+    for idx, msg in enumerate(output_msgs):
+        is_last = (idx == len(output_msgs) - 1)
         events.append(TracedEvent(
             event_id=str(uuid4()),
             type="chat.completion",
             role="assistant",
             content=_flatten_genai_parts(msg.get("parts", [])) if capture_content else None,
-            **common,
+            tokens_used=tokens if is_last else None,
+            cost_usd=cost if is_last else None,
+            **common_no_tokens,
         ))
 
     # If we produced nothing structured, emit a metadata-only marker so the
@@ -301,7 +306,9 @@ def _genai_log_to_events(
             event_id=str(uuid4()),
             type="chat.completion",
             content=None,
-            **common,
+            tokens_used=tokens,
+            cost_usd=cost,
+            **common_no_tokens,
         ))
 
     return events
@@ -432,10 +439,15 @@ def _ns_to_datetime(ns: int) -> datetime:
     return datetime.fromtimestamp(ns / 1e9, tz=timezone.utc)
 
 
-def _estimate_cost(tokens: TokenUsage | None) -> float | None:
-    if tokens and tokens.total > 0:
-        return round(tokens.total * 0.00001, 6)
-    return None
+def _estimate_cost(tokens: TokenUsage | None, provider: str = "", model: str = "") -> float | None:
+    if not tokens or tokens.total == 0:
+        return None
+    from tracea.server.pricing import estimate_cost
+    precise = estimate_cost(provider, model, tokens.input, tokens.output)
+    if precise is not None:
+        return precise
+    # Fallback: old rough heuristic for unknown providers
+    return round(tokens.total * 0.00001, 6)
 
 
 def _error_event(log: Any, msg: str, user_id: str) -> TracedEvent:
@@ -475,10 +487,22 @@ async def spans_to_events_and_persist(spans: list[dict], user_id: str = "") -> N
     # 1. Persist every span
     await enqueue_spans(spans)
 
-    # 2. Extract tool events
+    # 2. Build parent_id → tool_name map so nested tool spans can inherit the tool name from their parent.
+    parent_tool_names: dict[str, str] = {}
+    for s in spans:
+        attrs = s.get("span_attrs", {}) or {}
+        tn = (
+            attrs.get("gen_ai.tool.name")
+            or attrs.get("tool_name")
+            or _tool_name_from_span_name(s.get("name") or "")
+        )
+        if tn and s.get("span_id"):
+            parent_tool_names[s["span_id"]] = tn
+
+    # 3. Extract tool events
     tool_events: list[TracedEvent] = []
     for span in spans:
-        events = _span_to_tool_events(span, user_id)
+        events = _span_to_tool_events(span, user_id, parent_tool_names)
         tool_events.extend(events)
 
     if tool_events:
@@ -489,10 +513,16 @@ async def spans_to_events_and_persist(spans: list[dict], user_id: str = "") -> N
         asyncio.create_task(run_detection(tool_events))
 
 
-def _span_to_tool_events(span: dict, user_id: str) -> list[TracedEvent]:
-    """Emit tool_call (and tool_result if the span finished) for tool spans."""
+def _span_to_tool_events(
+    span: dict, user_id: str, parent_tool_names: dict | None = None
+) -> list[TracedEvent]:
+    """Emit tool_call (and tool_result if the span finished) for tool spans.
+
+    If the span's own attributes don't carry a tool name, inherit from the parent span.
+    """
     attrs = span.get("span_attrs", {}) or {}
     resource_attrs = span.get("resource_attrs", {}) or {}
+    parent_tool_names = parent_tool_names or {}
 
     is_tool = (
         attrs.get("gen_ai.operation.name") == "execute_tool"
@@ -504,9 +534,11 @@ def _span_to_tool_events(span: dict, user_id: str) -> list[TracedEvent]:
         return []
 
     tool_call_id = str(attrs.get("gen_ai.tool.call.id") or span.get("span_id") or uuid4())
+    parent_id = span.get("parent_span_id") or ""
     tool_name = (
         attrs.get("gen_ai.tool.name")
         or attrs.get("tool_name")
+        or parent_tool_names.get(parent_id, "")
         or _tool_name_from_span_name(span.get("name") or "")
         or "unknown"
     )
@@ -585,4 +617,66 @@ async def persist_metrics(metrics: list[dict], user_id: str = "") -> None:
         return
     from tracea.server.db import enqueue_metrics
     await enqueue_metrics(metrics)
+
+    # Fire metric-based detection rules for any sessions touched
+    import asyncio
+    from tracea.server.detection.engine import run_metric_detection
+    session_ids = {m.get("resource_attrs", {}).get("session_id")
+                   or m.get("resource_attrs", {}).get("session.id")
+                   for m in metrics}
+    session_ids.discard(None)
+    for sid in session_ids:
+        asyncio.create_task(run_metric_detection(sid))
+
+
+def _redact_log(log: dict) -> dict:
+    """Return a copy of the log with secrets scrubbed from body and attrs.
+
+    Uses tracea.server.redaction. Operates on:
+    - log['body'] (string or JSON-string)
+    - log['log_attrs'] values that look like content (event.name in
+      {claude_code.user_prompt, claude_code.assistant_response,
+       claude_code.api_request_body, claude_code.api_response_body})
+    """
+    from tracea.server.redaction import redact, redact_dict
+
+    log = dict(log)  # shallow copy
+    body = log.get("body")
+    if isinstance(body, str):
+        log["body"] = redact(body)
+    elif isinstance(body, dict):
+        log["body"] = redact_dict(body)
+
+    attrs = log.get("log_attrs")
+    if isinstance(attrs, dict):
+        # Redact known content-carrying attributes
+        CONTENT_KEYS = {
+            "gen_ai.system_instructions",
+            "gen_ai.input.messages",
+            "gen_ai.output.messages",
+        }
+        redacted_attrs = dict(attrs)
+        for k in CONTENT_KEYS:
+            if k in redacted_attrs:
+                redacted_attrs[k] = _redact_genai_messages(redacted_attrs[k])
+        log["log_attrs"] = redacted_attrs
+    return log
+
+
+def _redact_genai_messages(value):
+    """Recursively redact text within gen_ai.*.messages structures."""
+    from tracea.server.redaction import redact
+    if isinstance(value, list):
+        return [_redact_genai_messages(v) for v in value]
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k == "text" and isinstance(v, str):
+                out[k] = redact(v)
+            else:
+                out[k] = _redact_genai_messages(v)
+        return out
+    if isinstance(value, str):
+        return redact(value)
+    return value
 
