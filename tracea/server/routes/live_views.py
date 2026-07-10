@@ -191,7 +191,7 @@ async def list_events(
     return all_events
 
 
-@router.get("/sessions")
+@router.get("/sessions/tree")
 async def list_sessions_for_tree(user_id: Optional[str] = None, auth_user_id: str = Depends(get_auth_user_id)):
     """Return sessions with agent info for the left-hand tree panel."""
     db = get_db()
