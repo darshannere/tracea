@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { usePolling } from '@/hooks/usePolling'
 import { useUser } from '@/hooks/UserContext'
 import api from '@/lib/api'
@@ -79,9 +79,12 @@ function formatDate(iso: string): string {
 
 export function SessionsPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { selectedUser } = useUser()
   const [sorting, setSorting] = useState<SortingState>([])
-  const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
+  const [selectedAgent, setSelectedAgent] = useState<string | null>(
+    (location.state as { agent?: string } | null)?.agent ?? null
+  )
 
   const { data, error } = usePolling(async () => {
     const params = new URLSearchParams()
