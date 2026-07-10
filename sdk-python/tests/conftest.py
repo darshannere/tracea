@@ -10,6 +10,46 @@ from pathlib import Path
 # Ensure the package is importable from the source
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+
+def _reset_tracea_globals():
+    """Reset all tracea SDK singletons: config, buffer, httpx patch state."""
+    import tracea.config
+    import tracea.buffer as buffer_module
+
+    # Unpatch httpx if patched
+    try:
+        import tracea.patch.httpx as httpx_patch
+        if httpx_patch._is_patched:
+            httpx_patch.unpatch()
+    except Exception:
+        pass
+
+    # Reset config singleton
+    tracea.config._config = None
+
+    # Reset buffer singleton — cancel pending timer task
+    if buffer_module._buffer is not None:
+        try:
+            buf = buffer_module._buffer
+            if buf._timer_task is not None:
+                buf._timer_task.cancel()
+        except Exception:
+            pass
+        buffer_module._buffer = None
+
+
+@pytest.fixture(autouse=True)
+def _reset_globals():
+    """Reset all tracea global state before and after every test.
+
+    Without this, singletons (config, buffer, httpx patch) leak between
+    test files and cause hangs/failures when tests run together.
+    """
+    _reset_tracea_globals()
+    yield
+    _reset_tracea_globals()
+
+
 @pytest.fixture
 def event_loop():
     """Create an instance of the default event loop for each test case."""
