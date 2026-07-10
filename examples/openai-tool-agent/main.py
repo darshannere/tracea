@@ -296,7 +296,7 @@ DEMO_QUERIES = [
 ]
 
 
-async def run_demo():
+def run_demo():
     for i, query in enumerate(DEMO_QUERIES, 1):
         agent = ReActAgent()
         print(f"\n{'=' * 60}")
@@ -307,6 +307,8 @@ async def run_demo():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_demo())
+    run_demo()
+    from tracea.patch.httpx import drain_queue
+    drain_queue(timeout=2.0)
     import time
-    time.sleep(0.5)
+    time.sleep(1.0)

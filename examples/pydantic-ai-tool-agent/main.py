@@ -140,8 +140,10 @@ async def run_demo():
         result = await agent.run(query)
         print(f"\nAgent: {result.data}\n")
 
+    from tracea.buffer import get_buffer
+    await get_buffer().flush_now()
+    await get_buffer().close()
+
 
 if __name__ == "__main__":
     asyncio.run(run_demo())
-    import time
-    time.sleep(0.5)
