@@ -186,10 +186,10 @@ def test_base_url_stripping():
 
 
 def test_azure_openai_path_detection():
-    """PYS-06: Azure OpenAI deployment path is detected as openai provider."""
+    """PYS-06: Azure OpenAI deployment path is detected as azure_openai provider."""
     from tracea.patch._utils import detect_provider
-    assert detect_provider("https://my-azure.openai.azure.com/openai/deployments/gpt-4o/chat/completions") == "openai"
-    assert detect_provider("https://my-resource.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-06-01") == "openai"
+    assert detect_provider("https://my-azure.openai.azure.com/openai/deployments/gpt-4o/chat/completions") == "azure_openai"
+    assert detect_provider("https://my-resource.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-06-01") == "azure_openai"
 
 
 def test_is_llm_request_with_per_client_base_url():

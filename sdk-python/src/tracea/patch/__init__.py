@@ -8,7 +8,7 @@ def patch_client(client, base_url: str | None = None):
     or when a custom http_client was passed to the constructor.
 
     Args:
-        client: An openai.OpenAI or anthropic.Anthropic client instance.
+        client: An openai.OpenAI, anthropic.Anthropic, or async client instance.
         base_url: Optional per-client base URL override for provider detection.
                   For Azure OpenAI and other proxied endpoints where the httpx
                   client has a custom base_url set, pass that base URL here so
@@ -19,7 +19,7 @@ def patch_client(client, base_url: str | None = None):
         True if patching succeeded, False otherwise.
     """
     try:
-        # openai-python >= 1.0: client._client is the httpx.Client
+        # openai-python >= 1.0: client._client is the httpx.Client or httpx.AsyncClient
         http_client = getattr(client, "_client", None)
         if http_client is None:
             return False
@@ -28,7 +28,7 @@ def patch_client(client, base_url: str | None = None):
         if base_url is not None:
             http_client._tracea_base_url = base_url
 
-        # Reach the already-cached module to read live _is_patched and _patched_sync_send.
+        # Reach the already-cached module to read live _is_patched and patched functions.
         import sys as _sys
         _httpx_mod = _sys.modules.get("tracea.patch.httpx")
         if _httpx_mod is None:
@@ -39,8 +39,15 @@ def patch_client(client, base_url: str | None = None):
             return True
 
         # Class-level patch not active — apply an instance-level send patch.
-        _psend = _httpx_mod._patched_sync_send
-        http_client.send = lambda req, **kwargs: _psend(http_client, req, **kwargs)
+        # Branch on whether the client is sync (httpx.Client) or async (httpx.AsyncClient).
+        if isinstance(http_client, _httpx_mod.httpx.Client):
+            _psend = _httpx_mod._patched_sync_send
+            http_client.send = lambda req, **kwargs: _psend(http_client, req, **kwargs)
+        elif isinstance(http_client, _httpx_mod.httpx.AsyncClient):
+            _pasend = _httpx_mod._patched_async_send
+            http_client.send = lambda req, **kwargs: _pasend(http_client, req, **kwargs)
+        else:
+            return False
         return True
     except Exception as _e:
         import logging as _log

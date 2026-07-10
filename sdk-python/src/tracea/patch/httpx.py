@@ -3,6 +3,9 @@ from __future__ import annotations
 import httpx
 import time
 import asyncio
+import queue
+import threading
+import atexit
 from typing import Any, Optional
 from uuid import uuid4
 from tracea.patch._utils import detect_provider
@@ -15,6 +18,58 @@ _is_patched: bool = False
 
 # Per-session sequence counters
 _sequence_counters: dict[str, int] = {}
+
+# Background worker for async event emission — never blocks the caller.
+_emit_queue: queue.Queue = queue.Queue()
+_worker_thread: threading.Thread | None = None
+_worker_stop = threading.Event()
+_queue_drain_event = threading.Event()
+_queue_drain_event.set()
+
+
+def _worker_loop() -> None:
+    """Background thread: drains queue, runs async buffer.add() in own loop."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        while not _worker_stop.is_set():
+            try:
+                event = _emit_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
+            try:
+                from tracea.buffer import get_buffer
+                buffer = get_buffer()
+                loop.run_until_complete(buffer.add(event))
+            except Exception as exc:
+                import logging
+                logging.getLogger("tracea").error(f"_worker_loop failed: {exc}")
+            finally:
+                _emit_queue.task_done()
+    finally:
+        loop.close()
+
+
+def _start_worker() -> None:
+    """Ensure the background worker thread is running."""
+    global _worker_thread
+    if _worker_thread is not None and _worker_thread.is_alive():
+        return
+    _worker_stop.clear()
+    _worker_thread = threading.Thread(target=_worker_loop, daemon=True, name="tracea-emit-worker")
+    _worker_thread.start()
+
+
+def _stop_worker() -> None:
+    """Stop the worker (called at exit)."""
+    _worker_stop.set()
+    if _worker_thread and _worker_thread.is_alive():
+        _worker_thread.join(timeout=2.0)
+
+
+# Register atexit to flush on normal interpreter shutdown
+atexit.register(_stop_worker)
+
 
 def _get_next_sequence(session_id: str) -> int:
     global _sequence_counters
@@ -122,16 +177,24 @@ def _build_event(
         duration_ms=duration_ms,
         tokens_used=tokens_used,
         cost_usd=cost_usd,
-        metadata=ctx.get("metadata", {}),
+        metadata={**ctx.get("metadata", {}), **(config.metadata if config else {})},
     )
 
 def _extract_model(request: httpx.Request, response: httpx.Response | None) -> str:
     """Extract model name from request URL or body."""
+    from tracea.patch._utils import extract_azure_deployment
+    
     # Try URL first (common pattern: /v1/chat/models/gpt-4o)
     path_parts = request.url.path.split("/")
     for i, part in enumerate(path_parts):
         if part == "models" and i + 1 < len(path_parts):
             return path_parts[i + 1]
+    
+    # Try Azure deployment path: /openai/deployments/{deployment}/...
+    azure_deployment = extract_azure_deployment(request.url.path)
+    if azure_deployment:
+        return azure_deployment
+    
     # Try request body
     try:
         body = request.read().decode("utf-8")
@@ -165,51 +228,35 @@ def _estimate_cost(provider: str, model: str, tokens: TokenUsage) -> float | Non
     return None
 
 def _emit_event(event: TracedEvent) -> None:
-    """Emit event to buffer. Calls async buffer.add() from sync httpx send path.
+    """Emit event to buffer. Non-blocking — pushes to queue for background worker.
 
-    When called from sync code within an active asyncio context (e.g., pytest),
-    run the async add() in a background thread with its own event loop and wait
-    for it to complete before returning. This ensures the event is in the buffer
-    when flush_now() is called after the sync API call returns.
-
-    When called with no active event loop, use asyncio.run() directly.
+    The background worker processes the queue and calls buffer.add() in its own
+    event loop, so the caller's thread is never blocked.
     """
+    _start_worker()
+    _queue_drain_event.clear()
     try:
-        from tracea.buffer import get_buffer
-        buffer = get_buffer()
-        try:
-            running_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            running_loop = None
-
-        if running_loop is not None:
-            # Called from sync code within an active asyncio context.
-            # Run in a background thread with its own event loop, then block
-            # the calling thread until the add() completes.
-            import threading
-            result_holder = [None, None]  # [event, exception]
-
-            def _thread_target():
-                event_loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(event_loop)
-                try:
-                    event_loop.run_until_complete(buffer.add(event))
-                except Exception as exc:
-                    result_holder[1] = exc
-                finally:
-                    event_loop.close()
-
-            thread = threading.Thread(target=_thread_target, daemon=True)
-            thread.start()
-            thread.join()  # Block until the thread completes
-            if result_holder[1] is not None:
-                raise result_holder[1]
-        else:
-            # No running loop — use asyncio.run()
-            asyncio.run(buffer.add(event))
-    except Exception as exc:
+        _emit_queue.put_nowait(event)
+    except queue.Full:
         import logging
-        logging.getLogger("tracea").error(f"_emit_event failed: {exc}")
+        logging.getLogger("tracea").warning("Event queue full, dropping event")
+
+
+def drain_queue(timeout: float = 2.0) -> bool:
+    """Wait for all queued events to be processed by the background worker.
+
+    Returns True if the queue is empty within the timeout, False if still pending.
+    Used by tests and shutdown paths to ensure events reach the buffer.
+    """
+    _emit_queue.join()
+    # Give the worker time to actually add events to the buffer
+    import time
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if _emit_queue.empty():
+            return True
+        time.sleep(0.01)
+    return _emit_queue.empty()
 
 def _patched_sync_send(self, request: httpx.Request, **kwargs) -> httpx.Response:
     """Patched httpx.Client.send — sync path."""

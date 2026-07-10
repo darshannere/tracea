@@ -180,7 +180,9 @@ def fake_openai(httpserver: HTTPServer) -> HTTPServer:
 
 
 async def _flush_and_wait(wait_s: float = 1.0) -> None:
-    """Flush the SDK buffer then wait for the server's write buffer to commit."""
+    """Drain the emit queue, flush the SDK buffer, then wait for the server's write buffer to commit."""
+    from tracea.patch.httpx import drain_queue
+    drain_queue(timeout=2.0)
     from tracea.buffer import get_buffer
     await get_buffer().flush_now()
     await asyncio.sleep(wait_s)
