@@ -1,7 +1,18 @@
 class ApiClient {
+  private getAuthHeaders(): Record<string, string> {
+    const apiKey = typeof localStorage !== 'undefined'
+      ? localStorage.getItem('tracea_api_key')
+      : null
+    if (apiKey) {
+      return { Authorization: `Bearer ${apiKey}` }
+    }
+    return {}
+  }
+
   private async request<T = any>(url: string, options: RequestInit = {}): Promise<{ data: T }> {
     try {
-      const resp = await fetch(url, options)
+      const headers = { ...this.getAuthHeaders(), ...(options.headers as Record<string, string>) }
+      const resp = await fetch(url, { ...options, headers })
       if (!resp.ok) {
         // Construct an error that behaves like AxiosError
         const error = new Error(`Request failed with status ${resp.status}`) as any

@@ -8,6 +8,7 @@ import { YamlEditor } from '@/components/settings/YamlEditor'
 import { RuleTemplates } from '@/components/settings/RuleTemplates'
 import { RulesHelpPanel } from '@/components/settings/RulesHelpPanel'
 import { AlertsHelpPanel } from '@/components/settings/AlertsHelpPanel'
+import { ApiKeyDisplay } from '@/components/settings/ApiKeyDisplay'
 import api from '@/lib/api'
 
 interface RCAConfig {
@@ -214,6 +215,8 @@ export function SettingsPage() {
         <h2 className="text-xl font-semibold">Settings</h2>
       </div>
 
+      <ApiKeyDisplay />
+
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as TabId)} className="flex-1 flex flex-col min-h-0">
         <div className="flex items-center justify-between">
           <TabsList>
@@ -375,7 +378,7 @@ export function SettingsPage() {
                     </label>
                     <input
                       type="password"
-                      value={rcaConfig.api_key_present ? '' : ''}
+                      value={rcaConfig.api_key_present ? '' : (rcaConfig.api_key || '')}
                       onChange={(e) => setRcaConfig({ ...rcaConfig, api_key: e.target.value })}
                       placeholder={rcaConfig.api_key_present ? '••••••••' : 'sk-...'}
                       className="w-full text-sm border border-input rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-accent"
