@@ -8,7 +8,7 @@ Trace LLM sessions, detect anomalies, analyze root causes, and route alerts — 
 
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-56%20passing-brightgreen.svg)](#development)
+[![Tests](https://img.shields.io/badge/tests-212%20passing-brightgreen.svg)](#development)
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)](https://www.docker.com/)
 
 </div>
