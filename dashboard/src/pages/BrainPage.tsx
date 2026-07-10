@@ -45,9 +45,11 @@ interface GraphResponse {
 }
 
 interface SynthStatus {
-  last_synthesized_at: string | null
-  entries_analyzed: number
-  agents_tracked: number
+  pending: number
+  in_progress: number
+  done: number
+  failed: number
+  entries_total: number
 }
 
 const BADGE_COLORS: Record<string, string> = {
@@ -276,17 +278,6 @@ export function BrainPage() {
     codebase: 'Codebase',
   }
 
-  function formatLastSynthesized(dateStr: string | null): string {
-    if (!dateStr) return 'Never'
-    const diffMs = Date.now() - new Date(dateStr).getTime()
-    const diffMin = Math.floor(diffMs / 60000)
-    if (diffMin < 1) return 'Just now'
-    if (diffMin < 60) return `${diffMin} min ago`
-    const diffHr = Math.floor(diffMin / 60)
-    if (diffHr < 24) return `${diffHr}h ago`
-    return new Date(dateStr).toLocaleDateString()
-  }
-
   if (error && allEntries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
@@ -303,8 +294,8 @@ export function BrainPage() {
         <div>
           <h2 className="text-base font-semibold">Company Brain</h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            {synthStatus?.last_synthesized_at
-              ? `Last synthesized: ${formatLastSynthesized(synthStatus.last_synthesized_at)} · ${synthStatus?.entries_analyzed ?? 0} sessions analyzed · ${synthStatus?.agents_tracked ?? 0} agents`
+            {synthStatus
+              ? `${synthStatus.entries_total} entries · ${synthStatus.done} synthesized · ${synthStatus.pending} pending${synthStatus.failed > 0 ? ` · ${synthStatus.failed} failed` : ''}`
               : 'Loading synthesis status…'}
           </p>
         </div>
